@@ -40,10 +40,6 @@ except ImportError:
           print("Failed to import ElementTree from any known place")
 
 
-
-file = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/3125-SCO - Enniskillen Traffic Surveys (Atkins)/4.  Analysis/3. Working Data Files/JT/gps3.csv"
-
-
 class Route():
 
     ###
@@ -100,13 +96,6 @@ class Route():
         print("---------------------------")
         for tp in self.timingPoints:
             print(tp[0],tp[1]," : ",tp[2],tp[3])
-
-def get_timing_points():
-    BlueRoute = [(54.32197, -7.64876),(54.32850,-7.65421),(54.33299, -7.66370)]
-    tp1 = (54.32197, -7.64876)
-    TPEalt = (54.33289, -7.66278)
-    tp2 = (54.33299, -7.66370)
-    return BlueRoute
 
 def load_csv(file):
     ###
@@ -514,8 +503,8 @@ def process_direction(timingPoints,pointsInRoute,coords):
 
 def processRoutes(route,file):
     ###
-    ### we are passed route info ( timing points) , and want to get the gps data and cut it up, for both directions of
-    ### the route. We load the csv file,
+    ### we are passed route info ( as a route object) , and want to get the gps data and cut it up, for both directions of
+    ### the route
     global df,avLegTime
 
 
@@ -539,7 +528,7 @@ def processRoutes(route,file):
     if df is None:
         print("nothing loaded, returning")
         window.display_data(None)
-        messagebox.showinfo("error", "Invalid data file,must be .csv or .gpx")
+        messagebox.showinfo("error", "Invalid data file,must be .csv or .gpx, or please check format of data")
         return
     print("length of df is",len(df))
     avSpeed = df["legSpeed"].mean()
@@ -556,7 +545,6 @@ def processRoutes(route,file):
     df["Coords"] = pd.Series(data=coords, dtype=str)
     result = []
     result.append(process_direction(timingPoints,pointsInRoute,coords))
-    print("after first direction, result is",result)
     timingPoints = [(x[2], x[3]) for x in route.get_timing_points()[1]]
     result.append(process_direction(timingPoints, pointsInRoute, coords))
     window.receive_processed_data(result)
@@ -616,7 +604,10 @@ def getStartPoints(coords,tpStart,tpEnd,pointsInRoute):
                              ut.getDist((df.iloc[i]["Lat"], df.iloc[i]["Lon"]), tpStart)) for i in temp],
                            key=lambda x: x[2]))
             print("sorted temp is",temp)
-            #
+            ###
+            ### check how close the closest point is. If its further away than 0.009 ( a pretty arbitrary pick at the moment)
+            ### then we reject it as being too far away from the start point to count as a run start
+            ###
             if temp[0][2] < 0.009:
                 print("seleceted", temp[0][0])
                 startPoints.append((temp[0][0]))
@@ -629,7 +620,9 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
     ###
     ### we have a rough start point, but there may be a better one. Now that we have a definite fix ( or at least, a rough
     ### fix if there are only 2 timing points) on the time the track hits the next timing point, we can look back from that
-    ### time, to solidify the start point
+    ### time, to solidify the start point, since the actual start point must be between the currently selected start point
+    ### and the next timing point in the sequence. If we find the furthest point from the next timing point in the sequence
+    ### then the actual start point must be between that point and the next timing point.
     ###
 
     global df
@@ -663,6 +656,8 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
     ### restrict the data set to be between maxIndex and the end, because we know that the correct starting point cant
     ### be further back ( in time) than the point that is furthest from tp, and then search the restricted data set
     ### for the point nearest to tpStart
+    ### maybe a big assumption, because the track could bend in a wierd way which would allow the closest point to be
+    ### before the furthest point away
     ###
 
     tree = spatial.KDTree(coords[maxIndex:])
@@ -671,6 +666,12 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
     return result[1] + startIndex + maxIndex
 
 def get_closest_point_to_intermediate_point(startIndex,endIndex,tp):
+    ###
+    ### its simple to get the closest point to the intermediate TPS ( the points that arent the start or end point)
+    ### because we already have a rough start point and rough end point, we can just take the closest point to the intermediate
+    ### point that falls between the start point and end point.
+    ###
+
     global df
     print("cjecking",startIndex,endIndex,tp)
     tempdf = df.iloc[startIndex:endIndex]
@@ -679,11 +680,6 @@ def get_closest_point_to_intermediate_point(startIndex,endIndex,tp):
     coords = list(zip(lats, lons))
     tree = spatial.KDTree(coords)
     result = tree.query(np.array(tp), 1)
-    #points = np.sort(list[1][0])
-    #print("selected points are ", points)
-    #for p in points:
-        #if p < endIndex:
-            #return p + startIndex
     print("result is ", result[1] + startIndex)
     return result[1] + startIndex
 
@@ -731,6 +727,11 @@ def get_temp_end_point(startIndex,endIndex,tpEnd):
 
 def get_final_end_point(startIndex,endIndex,tp,tpEnd):
     global df
+    ###
+    ### similar to finding the final start point, we find the final end point by finding the furthest point away from
+    ### the 2nd last timing point, and working back from there to find the closest point to the end TP
+    ###
+
     print("end point checking", startIndex, endIndex)
     tempdf = df.iloc[startIndex:endIndex+1]
     lats = tempdf["Lat"].tolist()
@@ -767,20 +768,6 @@ def get_final_end_point(startIndex,endIndex,tp,tpEnd):
 #mask = df["legSpeed"] == np.inf
 #print(df[mask])
 #exit()
-
-
-#dodgyPoint = (5624.3558	-327.6634)
-#file = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/3125-SCO - Enniskillen Traffic Surveys (Atkins)/4.  Analysis/3. Working Data Files/JT/gps3.csv"
-#df = load_csv(file)
-#print(df.iloc[-1])
-#print(df["legTime"].dtype)
-#print(df.info())
-#mask = df["legSpeed"] == np.inf
-#print(df[mask])
-#load_timing_points()
-#exit()
-
-
 
 window = MainWindow.mainWindow()
 window.setCallbackFunction("process",processRoutes)

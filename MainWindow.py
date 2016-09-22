@@ -66,7 +66,7 @@ class mainWindow(tkinter.Tk):
 
         topFrame = tkinter.Frame(self,width = 890,height = 1000,bg="white")
         subFrame = tkinter.Frame(topFrame, width=100, height=900, bg="white")
-        self.routeListBox = tkinter.Listbox(master = subFrame,height = 10,width=10,relief=tkinter.SUNKEN,borderwidth =5,bg="white")
+        self.routeListBox = tkinter.Listbox(master = subFrame,height = 10,width=15,relief=tkinter.SUNKEN,borderwidth =5,bg="white")
         self.TPListBox = tkinter.Listbox(master=topFrame, height=15, relief=tkinter.SUNKEN, borderwidth=5,bg="white")
         buttonFrame = tkinter.Frame(subFrame,height = 100,bg="white")
 

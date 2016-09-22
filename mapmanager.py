@@ -21,6 +21,7 @@ class MapManager():
         self.zoom = self.calculateZoomValue(tps)
         self.tps = tps
         self.center_lat,self.center_lon = self.get_centre_of_points(tps)
+        print(self.center_lat,self.center_lon)
         #self.center_lon = coords[1]
 
         self.static_map = self.load_map(self.center_lat, self.center_lon)
@@ -92,17 +93,17 @@ class MapManager():
         lon = (mx / ORIGIN_SHIFT) * 180.0
         return lat, lon
 
-    def get_coords(self,coords):
+    def get_coords(self,coords,size=800):
         ## takes a lat and long pair, converts them to x,y coordinates that refer to where on the drawing canvas the point is, given that we know the lat,lon of the centre point of the map
-        lat,lon = coords
+        print("in getcoords, size is",size)
         point = self.latlontopixels(coords)
         centre = self.latlontopixels((self.center_lat,self.center_lon))
         x = centre[0]-point[0]
         y = centre[1]-point[1]
-        scaleFactor = 1.25 # 800/640
+        scaleFactor = size/640
         x*=scaleFactor # scaling factor, because we have stretched the map to 800 by 800
         y*=scaleFactor
-        return (self.map_width/2) - x, (self.map_height/2) + y
+        return (size/2) - x, (size/2) + y
 
     def get_map_with_path(self,tps,path):
         #print("length of path is ",len(path))
@@ -130,11 +131,9 @@ class MapManager():
         #image.show()
         return image
 
-
     def change_zoom(self,val):
         self.zoom+=val
         return self.load_map(self.center_lat, self.center_lon)
-
 
     def load_map(self,lat,lon):
         markers = ""
