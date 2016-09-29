@@ -8,6 +8,7 @@ import openpyxl
 import win32com.client
 from PIL import Image,ImageDraw,ImageTk
 from tkinter import filedialog
+from tkinter import messagebox
 import threading
 import queue
 import copy
@@ -19,10 +20,13 @@ class mainWindow(tkinter.Tk):
     def __init__(self):
         super(mainWindow, self).__init__()
         self.routes = {}
+        self.tracsisBlue = "#%02x%02x%02x" % (20, 27, 77)
+        ttk.Style().configure(".",foreground = self.tracsisBlue,background = "white",weight="bold")
         #self.bind("<<finished>>",self.received)
         self.selectedRoute = None
         self.progress = None
         self.trackData = None
+        self.unitsVar = tkinter.IntVar()
         self.q = queue.Queue()
         self.discardedRuns = []
         self.baseData = [] ### store the returned data, ready to display either normal or discarded runs
@@ -31,13 +35,14 @@ class mainWindow(tkinter.Tk):
         self.processSingleTrackFunction = None
         self.loadRoutesFunction = None
         self.getDateFunction = None
+        self.getSpeedFunction = None
         self.previousLegIndex = -1 # this keeps track of the leg that is displayed yellow, so we dont have to redraw the whole track each time
         self.primaryTrackList = []
         self.secondaryTrackList = []
         self.trackWindow = None
         self.mapMan = None
         self.mapImage = None
-        self.wm_title("Journey Times")
+        self.wm_title("JoPro - Journey Time Software")
         self.state("zoomed")
         self.primaryTrees = []
         self.secondaryTrees = []
@@ -64,75 +69,176 @@ class mainWindow(tkinter.Tk):
 
         ttk.Style().configure("Treeview.Heading", background="black")
 
-        topFrame = tkinter.Frame(self,width = 890,height = 1000,bg="white")
+        topFrame = tkinter.Frame(self,width = 1020,height = 1000, bg="white")
         subFrame = tkinter.Frame(topFrame, width=100, height=900, bg="white")
-        self.routeListBox = tkinter.Listbox(master = subFrame,height = 10,width=15,relief=tkinter.SUNKEN,borderwidth =5,bg="white")
-        self.TPListBox = tkinter.Listbox(master=topFrame, height=15, relief=tkinter.SUNKEN, borderwidth=5,bg="white")
+        self.routeListBox = tkinter.Listbox(master = subFrame,height = 10,width=17,relief=tkinter.SUNKEN,borderwidth =5,bg="white")
+        #self.TPListBox = tkinter.Listbox(master=topFrame, height=15, relief=tkinter.SUNKEN, borderwidth=5,bg="white")
         buttonFrame = tkinter.Frame(subFrame,height = 100,bg="white")
 
-        tkinter.Button(buttonFrame,text="+",font = labelFont,bg="white",command=lambda :self.change_zoom(1)).grid(row = 0,column = 0,sticky="n",pady = 10)
-        tkinter.Button(buttonFrame, text="-", font=labelFont,bg="white",command=lambda :self.change_zoom(-1)).grid(row=1, column=0,sticky="s",pady = 10)
-        buttonFrame.grid(row = 1,column=0,pady = 200)
-        self.messageFrame = tkinter.Frame(subFrame,width = 100,height = 200, bg="white")
-        self.logoCanvas = tkinter.Canvas(topFrame,width = 200,height = 150,bg="white",borderwidth =0, highlightthickness=0, relief='ridge')
-        img = Image.open("tracsis Logo.jpg")
-        img =img.resize((int(img.width/2),int(img.height/2)),Image.ANTIALIAS)
-        #img.show()
-        self.logo = ImageTk.PhotoImage(img)
-        self.discardedLabel= tkinter.Label(self,text="Discarded Runs \n 0",font=labelFont,bg= "white")
-        self.discardedLabel.grid(row=0,column = 4,sticky= "n")
+        tkinter.Button(buttonFrame,text="+",font = labelFont,bg="white",width=2,command=lambda :self.change_zoom(1)).grid(row = 0,column = 0,sticky="ne",pady = (250,5))
+        tkinter.Button(buttonFrame, text="-", font=labelFont,bg="white",width=2,command=lambda :self.change_zoom(-1)).grid(row=1, column=0,sticky="se",pady = 10)
+        buttonFrame.grid(row = 1,column=0,pady = (200,0),sticky="e")
+
+        self.discardedLabel= tkinter.Label(subFrame,text="Discarded\n Runs \n 0",font=labelFont,bg= "white",fg = self.tracsisBlue)
+        self.discardedLabel.grid(row=1,column = 0,sticky= "n",pady = 10)
         self.discardedLabel.bind("<Double-Button-1>",self.display_discarded_runs)
-        self.logoCanvas.create_image(5, 5, image=self.logo,anchor = tkinter.NW)
+
         self.thumbnailCanvas = tkinter.Canvas(master = topFrame,width = 805,height = 805,relief=tkinter.SUNKEN,borderwidth =5,bg="white")
         self.routeListBox.bind('<Double-Button-1>', self.runProcess)
         self.routeListBox.bind('<<ListboxSelect>>', self.showTPs)
-        tkinter.Label(topFrame,text = "Route",font=labelFont,justify=tkinter.LEFT,bg="white").grid(row=0,column=0, pady= (0,11),sticky="nw")
-        self.mapLabel = tkinter.Label(topFrame, text="Map", font=labelFont,justify=tkinter.LEFT,bg="white")
-        self.mapLabel.grid(row=0, column=1,pady= 0,sticky="nw")
+        tkinter.Label(topFrame,text = "Route",font=labelFont,justify=tkinter.LEFT,bg="white",fg = self.tracsisBlue).grid(row=0,column=0,padx=(10,0), pady= (0,11),sticky="nw")
+        self.mapLabel = tkinter.Label(topFrame, text="Map", font=labelFont,justify=tkinter.LEFT,bg="white",fg = self.tracsisBlue)
+        self.mapLabel.grid(row=0, column=1,padx=(10,0),pady= 0,sticky="nw")
 
-        subFrame.grid(row=1,column=0, sticky="nw",padx=0)
+        subFrame.grid(row=1,column=0, sticky="nw",padx=(40,30))
         self.routeListBox.grid(row=0, column=0, pady=2, padx=0, sticky="nw")
-        #self.messageFrame.grid(row=1,column = 0)
 
 
-        self.thumbnailCanvas.grid(row=1, column=1, pady=0, padx=0, sticky="nw")
-        self.logoCanvas.grid(row=2, column=1, pady=10, padx=10, sticky="nw")
-        topFrame.grid(row=0, column=0,sticky="nw", pady=0,padx=0)
+        self.thumbnailCanvas.grid(row=1, column=1, pady=0, padx=10, sticky="nw")
+
+        topFrame.grid(row=0, column=0,sticky="nw", pady=30,padx=0)
         topFrame.grid_propagate(False)
 
 
-        frame = tkinter.Frame(self,bg="white")
+        frame = tkinter.Frame(self,bg="white") ### outer frame, that contains everything in this segment
+
+        ###
+        ### set up the logo
+        ###
+        self.logoCanvas = tkinter.Canvas(frame, width=200, height=150, borderwidth=0, highlightthickness=0,relief='ridge',bg="white")
+        img = Image.open("tracsis Logo.jpg")
+        img = img.resize((int(img.width / 2), int(img.height / 2)), Image.ANTIALIAS)
+        self.logo = ImageTk.PhotoImage(img)
+        self.logoCanvas.create_image(5, 5, image=self.logo, anchor=tkinter.NW)
+        self.logoCanvas.grid(row=3, column=0, pady=5, padx=10, sticky="ne")
+
+        ###
+        ### set up the notebook, and frames for each page in the notebook, add them to the notebook
+        ###
+
         self.tabs = ttk.Notebook(frame)
-        self.matrixFrame = tkinter.Frame(self, relief=tkinter.SUNKEN, borderwidth=5, width=800, height=794,bg="white")
-        self.matrixFrame2 = tkinter.Frame(self, relief=tkinter.SUNKEN, borderwidth=5, width=800, height=794,bg="white")
-        self.matrixFrame.grid_propagate(False)
-        self.matrixFrame2.grid_propagate(False)
+        self.matrixFrame = tkinter.Frame(self, relief=tkinter.SUNKEN, borderwidth=5, bg="white")
+        self.matrixFrame2 = tkinter.Frame(self, relief=tkinter.SUNKEN, borderwidth=5, width=800, height=794, bg="white")
         self.tabs.add(self.matrixFrame, text="Primary")
         self.tabs.add(self.matrixFrame2, text="Secondary")
-        self.journeyLabel = tkinter.Label(frame, text="Journey Time Summary", font=labelFont,justify=tkinter.LEFT,bg="white")
-        self.journeyLabel.grid(row=0, column=0,pady= (0,11),sticky="nw")
+
+        ###
+        ### set up a canvas and a scrollbar for each page of the notebook
+        ###
+
+        canvas = tkinter.Canvas(self.matrixFrame,width = 800,height = 764,bg="white")
+        hbar = tkinter.Scrollbar(self.matrixFrame, orient=tkinter.HORIZONTAL,command=canvas.xview)
+        canvas.config(xscrollcommand=hbar.set,scrollregion=(0,0,810,0))
+        canvas.grid(row=0,column=0)
+        hbar.grid(row=1,column=0,sticky="we")
+        canvas.xview_moveto(0)
+        canvas.yview_moveto(0)
+
+        canvas2 = tkinter.Canvas(self.matrixFrame2, width=800, height=764,bg="white")
+        hbar2 = tkinter.Scrollbar(self.matrixFrame2, orient=tkinter.HORIZONTAL, command=canvas.xview)
+        canvas2.config(xscrollcommand=hbar2.set, scrollregion=(0, 0, 810, 0))
+        canvas2.grid(row=0, column=0)
+        hbar2.grid(row=1, column=0, sticky="we")
+        canvas2.xview_moveto(0)
+        canvas2.yview_moveto(0)
+
+        ###
+        ### add a frame to each canvas
+        ###
+
+        innerFrame = tkinter.Frame(canvas,bg="white")
+        canvas.create_window((0,0),window=innerFrame,anchor="nw")
+        innerFrame2 = tkinter.Frame(canvas2, bg="white")
+        canvas2.create_window((0, 0), window=innerFrame2, anchor="nw")
+
+
+        self.bind_all("<<NotebookTabChanged>>", self.tabChanged)
+
+
+
+        self.journeyLabel = tkinter.Label(frame, text="Journey Time Summary", font=labelFont,justify=tkinter.LEFT,bg="white",fg = self.tracsisBlue)
+        self.journeyLabel.grid(row=0, column=0,pady= (29,11),sticky="nw")
 
         self.tabs.grid(row=1,column=0,sticky="nw")
         ttk.Style().configure("Treeview", background="light grey")
-        frame.grid(row=0,column = 1, pady=0, padx=0,sticky="nw")
+        frame.grid(row=0,column = 1, pady=0, padx=(40,0),sticky="ne")
         self.loadSettings()
+        self.update()
+        print("canvas size is",canvas.winfo_width(),canvas.winfo_height(),canvas.winfo_reqwidth(),canvas.winfo_reqheight())
+        print("frame size is", innerFrame.winfo_width(), innerFrame.winfo_height(), innerFrame.winfo_reqwidth(),innerFrame.winfo_reqheight())
+
+
+    def scroll_data_window(self,event):
+        print("event",event,event.widget.get())
+        left, right = (event.widget.get())
+        thumbsize = right - left
+        f = event.widget.fraction(event.x, event.y)
+        if f < left:
+            f = f - (thumbsize / 2)
+        print("fraction is",f)
+        self.dataWindow.xview_moveto(f)
+        self.dataWindow.xview_moveto(f)
+
+    def tabChanged(self,event):
+        frame = None
+        print("tab changed, widget type is", type(event.widget))
+        ch = self.nametowidget(event.widget.select())
+        print("child of tab is",type(ch))
+        for child in ch.winfo_children():
+            w = self.nametowidget(child)
+            if type(w) == tkinter.Canvas:
+                frame= w.winfo_children()[0]
+        print(type(frame))
+        if self.baseData == []:
+            return
+
+        text = self.discardedLabel.cget("text")
+        print("calling widget",event.widget)
+        print("index",self.tabs.index(self.tabs.select()))
+        index = self.tabs.index(self.tabs.select())
+
+        #print("setting scrollregion to",self.primaryTrees[0].winfo_width())
+        if "Discarded" in text:
+            noOfRuns = len(self.baseData[index][2])
+            self.discardedLabel.configure(text="Discarded\n Runs\n" + str(noOfRuns))
+        else:
+            noOfRuns = len(self.baseData[index][0])
+            self.discardedLabel.configure(text="Normal\n Runs\n" + str(noOfRuns))
 
     def display_discarded_runs(self,event):
         text = self.discardedLabel.cget("text")
-        if "Discarded Runs" in text:
-            noOfRuns = len(self.baseData[0][0])
-            self.discardedLabel.configure(text="Normal Runs\n" + str(noOfRuns))
+        index = self.tabs.index(self.tabs.select())
+
+        if "Discarded" in text:
+            noOfRuns = len(self.baseData[index][0])
+            self.discardedLabel.configure(text="Normal\n Runs\n" + str(noOfRuns))
             prim = copy.deepcopy(self.baseData[0])
             sec = copy.deepcopy(self.baseData[1])
             dataToDisplay = [[prim[2], prim[1]], [sec[2], sec[1]]]
             self.display_data(dataToDisplay)
         else:
-            noOfRuns = len(self.baseData[0][2])
-            self.discardedLabel.configure(text="Discarded Runs\n" + str(noOfRuns))
+            noOfRuns = len(self.baseData[index][2])
+            self.discardedLabel.configure(text="Discarded\n Runs\n" + str(noOfRuns))
             prim = list(self.baseData[0])
             sec = list(self.baseData[1])
             dataToDisplay = [[prim[0], prim[1]], [sec[0], sec[1]]]
             self.display_data(dataToDisplay)
+
+    def display_data(self, result):
+
+
+
+        if result is None:
+            # print("Stopping progress now -----")
+            self.stopProgress()
+            return
+        primary = result[0]
+        secondary = result[1]
+        # print("Secondary is ",secondary)
+        self.displayPrimary(primary)
+        self.displaySecondary(secondary)
+        # ("Stopping progress now")
+        self.stopProgress()
 
     def startProgress(self,msg):
 
@@ -163,7 +269,7 @@ class mainWindow(tkinter.Tk):
     def showTPs(self,event):
         ### Get the current selection in the routes List box, and display the TPS for that route in the TPS list box
         ###
-        self.TPListBox.delete(0,tkinter.END)
+        #self.TPListBox.delete(0,tkinter.END)
         routeName = self.routeListBox.get(self.routeListBox.curselection())
         if routeName in self.routes:
             self.mapLabel.configure(text="Map - " + routeName)
@@ -171,9 +277,9 @@ class mainWindow(tkinter.Tk):
             #self.routes[routeName].get_map().show()
             #print("img size is",self.thumbnail.width(),self.thumbnail.height())
             self.thumbnailCanvas.create_image(10, 10, image=self.thumbnail, anchor=tkinter.NW)
-            for tps in self.routes[routeName].get_timing_points():
-                for point in tps:
-                    self.TPListBox.insert(tkinter.END,point)
+            #for tps in self.routes[routeName].get_timing_points():
+                #for point in tps:
+                    #self.TPListBox.insert(tkinter.END,point)
 
     def key_pressed(self,event):
         if event.widget in self.primaryTrees[:3]:
@@ -204,17 +310,6 @@ class mainWindow(tkinter.Tk):
         self.saveSettings()
         self.settingsWindow.destroy()
         self.settingsWindow = None
-        text = "Red in Durations Table = duration of journey(or leg of journey) is greater than " + str(
-            self.entryValues[7].get()) + "% above the overall average"
-        text += "\n\nYellow in Speed Table = Overall average speed is greater than " + str(self.entryValues[6].get())
-        children = self.winfo_children()
-        for child in children:
-            print(child)
-        for child in children[5].children.values():
-            info = child.grid_info()
-            if info["row"] == 0 and info["column" ]==0:
-                child.configure(text=text)
-
         self.check_tags(self.primaryTrees,self.primaryTrackList)
         self.check_tags(self.secondaryTrees,self.secondaryTrackList)
 
@@ -224,6 +319,16 @@ class mainWindow(tkinter.Tk):
     def export(self):
         file = filedialog.asksaveasfilename()
         #print(file)
+        if file == "":
+            messagebox.showinfo(message="no file name entered, exiting Export")
+            return
+        for child in self.excelWindow.winfo_children():
+            widget = self.nametowidget(child)
+            if type(widget) == tkinter.Checkbutton:
+                if widget.cget("text") == "Primary":
+                    if widget.get() == 1:
+                        print("yes")
+
         dir = self.entryValues[4].get()
         am = self.entryValues[1].get()
         ip = self.entryValues[2].get()
@@ -245,20 +350,18 @@ class mainWindow(tkinter.Tk):
             secondaryDirection = "Anticlockwise"
         if primaryDirection == "Anticlockwise":
             secondaryDirection = "Clockwise"
-
-        TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[0]]
-        self.export_to_excel(self.primaryTrees,TPs,self.primaryTrackList,file + " " + primaryDirection)
-        track = self.secondaryTrackList[0]
-        TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[1]]
-        self.export_to_excel(self.secondaryTrees, TPs, self.secondaryTrackList,file + " " + secondaryDirection)
+        if self.check1.get() == 1:
+            TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[0]]
+            self.export_to_excel(self.primaryTrees,TPs,self.primaryTrackList,file + " " + primaryDirection)
+        if self.check2.get() == 1:
+            TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[1]]
+            self.export_to_excel(self.secondaryTrees, TPs, self.secondaryTrackList,file + " " + secondaryDirection)
 
     def export_to_excel(self,trees,timingPoints,trackList,filename):
         AMRuns = 0
         IPRuns = 0
         PMRuns = 0
         runsList = []
-        IPRunsList = []
-        PMRunsList = []
         am1 = self.entryValues[0].get()
         am2 = self.entryValues[1].get()
         ip1 = self.entryValues[2].get()
@@ -285,7 +388,6 @@ class mainWindow(tkinter.Tk):
             print(e)
             return
         tpCount = len(self.selectedRoute.get_timing_points()[0])
-        #print("no of timing points",len(self.selectedRoute.get_timing_points()[0]))
         for i,child in enumerate(trees[0].get_children()):
             self.progress.step()
             self.progressWin.update()
@@ -315,25 +417,30 @@ class mainWindow(tkinter.Tk):
                 flag = True
         rawData = []
         print("runslist is",runsList)
-        for i,child in enumerate(runsList):
+        for i,run in enumerate(runsList):
             self.progress.step()
             self.progressWin.update()
             for j in range(tpCount):
-                sheet.cell(row=2+i,column = 1 + j).value = trees[0].item(child)["values"][j + 1]
+                sheet.cell(row=2+i,column = 1 + j).value = trees[0].item(run)["values"][j + 1]
             sheet.cell(row = 2+i,column = 1 + tpCount).value = self.getDateFunction(trackList[i][0])
         #for i,child in enumerate(trees[1].get_children()):
             for j in range(tpCount):
-                sheet.cell(row=2 + i, column=j + tpCount + 2).value = trees[1].item(child)["values"][j + 1]
+                sheet.cell(row=2 + i, column=j + tpCount + 2).value = trees[1].item(run)["values"][j + 1]
         #for i,child in enumerate(trees[2].get_children()):
             for j in range(tpCount):
-                sheet.cell(row=2 + i, column=j + (2 * tpCount) + 2).value = trees[2].item(child)["values"][j + 1]
-
+                sheet.cell(row=2 + i, column=j + (2 * tpCount) + 2).value = trees[2].item(run)["values"][j + 1]
+        if self.check3.get() == 1:
             ###
             ### dump raw data to the excel sheet
             ###
-            data = self.getTrack(trackList[int(child) -1])
-            data["Track No"] = "Track " + str(child)
-            data[["Track No","Record", "Time", "Lat", "Lon", "legTime", "legSpeed"]].apply(lambda x: rawData.append(x.tolist()), axis=1)
+            for i,data in enumerate(trackList):
+                try:
+                    data = self.getTrack(data)
+                    data["Track No"] = "Track " + str(runsList[i])
+                    data[["Track No","Record", "Time", "Lat", "Lon", "legTime", "legSpeed"]].apply(lambda x: rawData.append(x.tolist()), axis=1)
+                except Exception as e:
+                    pass
+                    ### total hack, if we have deleted some runs and try to dump the data, when we look for track x
 
         sheet["A1"] = AMRuns
         sheet["B1"] = self.entryValues[0].get()
@@ -345,7 +452,7 @@ class mainWindow(tkinter.Tk):
         sheet["H1"] = self.entryValues[4].get()
         sheet["I1"] = self.entryValues[5].get()
         sheet["J1"] = tpCount
-        #primaryTPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[0]]
+
         if self.getTrack != None:
             self.mapMan = mapmanager.MapManager(640, 640, 12, timingPoints[0], timingPoints)
             self.trackData = self.getTrack(trackList[0])
@@ -355,7 +462,9 @@ class mainWindow(tkinter.Tk):
             self.progressWin.update()
             #print(track[0][i],track[0][i+1],"offset is",offset)
             #print("dist between tps is",self.trackData["legDist"][self.trackList[0][i]-offset:self.trackList[0][i+1]-offset].sum())
-            sheet.cell(row=1,column = 11+i).value = self.trackData["legDist"][trackList[0][i]-offset:trackList[0][i+1]-offset].sum()
+            values = trees[5].item(trees[5].get_children()[0])["values"][1:]
+            print("values are",values)
+            sheet.cell(row=1,column = 11+i).value = values[i]
         lats = self.trackData["Lat"].tolist()
         lons = self.trackData["Lon"].tolist()
         pathData = list(zip(lats, lons))
@@ -418,7 +527,6 @@ class mainWindow(tkinter.Tk):
         values = result[3]
         values.insert(0, trackName[0])
         trees[2].item(trees[2].selection()[0], values=values)
-        #print(self.primaryTrackList)
         self.check_tags(trees, trackList)
         event.widget.item(curItem, values=result[1])
         self.spawn_track_window(None)
@@ -635,30 +743,34 @@ class mainWindow(tkinter.Tk):
         return 'break'
 
     def receive_processed_data(self,result):
+        ###
+        ### result is a list of lists
+        ### result[0] holds the primary direction runs
+        ### result[1] holds the secondary direction runs
+        ### each specific direction holds [data,distances,discarded runs]
+        ###
+
+        ###
+        ### set up the discarded runs label to show how many discarded runs there are
+        ## then set up baseData, which holds the results of the journey times.
+        ###
+
+        self.tabs.select(self.tabs.tabs()[0]) ## select the Primary tab
         self.baseData = result
         print("result is",result)
         if result == []:
             return
-        prim = copy.deepcopy(self.baseData[0])
+        prim = copy.deepcopy(self.baseData[0]) ### there was a reason why I deep copied, cant remember....
         sec = copy.deepcopy(self.baseData[1])
-        dataToDisplay = [[prim[0],prim[1]],[sec[0],sec[1]]]
         noOfRuns = len(self.baseData[0][2])
-        self.discardedLabel.configure(text="Discarded Runs\n" + str(noOfRuns))
-        self.display_data(dataToDisplay)
-
-    def display_data(self, result):
+        self.discardedLabel.configure(text="Discarded\n Runs\n" + str(noOfRuns))
 
         if result is None:
-            #print("Stopping progress now -----")
+            # print("Stopping progress now -----")
             self.stopProgress()
             return
-        #self.discardedRuns = result[1]
-        primary = result[0]
-        secondary = result[1]
-        # print("Secondary is ",secondary)
-        self.displayPrimary(primary)
-        self.displaySecondary(secondary)
-        #("Stopping progress now")
+        self.displayPrimary(prim)
+        self.displaySecondary(sec)
         self.stopProgress()
 
     def runProcess(self,event):
@@ -668,6 +780,10 @@ class mainWindow(tkinter.Tk):
         for tree in self.secondaryTrees:
             tree.forget()
             tree.destroy()
+        self.primaryTrees=[]
+        self.secondaryTrees=[]
+        self.primaryTrackList = []
+        self.secondaryTrackList = []
         routeName = self.routeListBox.get(self.routeListBox.curselection())
         if not routeName in self.routes:
             self.mapLabel.configure(text="Map")
@@ -713,9 +829,18 @@ class mainWindow(tkinter.Tk):
         self.cbox.grid(row = 3 ,column = 1)
         self.cbox.current(0)
         frame.grid(padx=10, pady=10)
-        tkinter.Checkbutton(frame,text = "Primary")
-        tkinter.Button(frame,text = "Export",command = self.export).grid(row  = 4,column  = 0,padx=10, pady=10)
-        tkinter.Button(frame, text="Exit", command = self.excel_settings_closed).grid(row=4, column=1,padx=10, pady=10)
+        self.check1 = tkinter.IntVar()
+        tkinter.Checkbutton(frame,text = "Primary",variable = self.check1).grid(row = 4,column = 0)
+        self.check2 = tkinter.IntVar()
+        tkinter.Checkbutton(frame, text="Secondary",variable = self.check2).grid(row=4, column=1)
+        self.check3 = tkinter.IntVar()
+        tkinter.Checkbutton(frame, text="Export Raw Data",variable = self.check3).grid(row=4, column=2)
+        self.check1.set(1)
+        self.check2.set(1)
+        self.check3.set(0)
+        tkinter.Button(frame,text = "Export",command = self.export).grid(row  = 5,column  =0,padx=10, pady=10)
+        tkinter.Button(frame, text="Exit", command = self.excel_settings_closed).grid(row=5, column=1,padx=10, pady=10)
+
 
     def spawn_settings_window(self):
         self.settingsWindow = tkinter.Toplevel(self)
@@ -744,10 +869,39 @@ class mainWindow(tkinter.Tk):
         #print(frame.winfo_children()[-1].winfo_name())
         frame.winfo_children()[-1].grid_forget()
         frame.winfo_children()[-2].grid_forget()
-
+        #self.unitsVar = tkinter.IntVar()
         #tkinter.Button(frame, text="Save", command=self.saveSettings).grid(row=2, column=0, padx=10, pady=10)
-        tkinter.Button(frame, text="Exit", command=self.settings_closed).grid(row=11, column=1, padx=10, pady=10)
+        tkinter.Button(frame, text="Exit", command=self.settings_closed).grid(row=11, column=2, padx=10, pady=10)
+        tkinter.Radiobutton(frame, text="Miles", variable=self.unitsVar, value=1).grid(
+            row=11, column=0, padx=(50, 0))
+        tkinter.Radiobutton(frame, text="Kilometres", variable=self.unitsVar, value=2).grid(
+            row=11, column=1, padx=(50, 0))
         frame.grid(padx = 10,pady =10)
+        self.unitsVar.trace("w",self.units_changed)
+
+    def get_units(self):
+        return self.unitsVar.get()
+
+    def units_changed(self,*args):
+        ###
+        ### user changed units in settings, either in miles or kilometres
+        ###
+
+        for dir in self.baseData:
+            distList = []
+            for track in dir[0]:
+                result = self.getSpeedFunction(track[0])
+                track[2] = result[0]
+                distList.append(result[1])
+            if len(distList) != 0:
+                distList = [round(sum(i) / len(distList), 3) for i in zip(*distList)]
+            else:
+                distList = []
+            dir[1] = distList
+        prim = copy.deepcopy(self.baseData[0])  ### there was a reason why I deep copied, cant remember....
+        sec = copy.deepcopy(self.baseData[1])
+        self.displayPrimary(prim)
+        self.displaySecondary(sec)
 
     def check_tags(self,trees,trackList):
 
@@ -757,6 +911,7 @@ class mainWindow(tkinter.Tk):
         if trees is None or trees == [] or trackList is None:
             return
         l = []
+        print(trees[1])
         for row in trees[1].get_children():
             l.append(trees[1].item(row)[
                          "values"])  # we now have a list of lists, each sublist is the duration times for a specific leg of a journey
@@ -770,7 +925,7 @@ class mainWindow(tkinter.Tk):
             sum([datetime.timedelta(seconds=init.hour * 3600 + init.minute * 60 + init.second) for init in sublist],
                 datetime.timedelta(0)) / denom).split(".")[0] for sublist in
              l]  # convert the datetimes to timedeltas, sum the timedeltas, get the average, convert to string, format the string removing decimal places etc
-        l.insert(0, "")
+        l.insert(0, "Average")
         #print(l)
         trees[3].delete(trees[3].get_children())
         trees[3].insert("", "end", values=l)
@@ -788,7 +943,7 @@ class mainWindow(tkinter.Tk):
         l = [round(sum(item) / len(item), 2) for item in l]
         #print(l)
 
-        l.insert(0, "")
+        l.insert(0, "Average")
         trees[4].delete(trees[4].get_children())
         trees[4].insert("", "end", values=l)
 
@@ -847,11 +1002,26 @@ class mainWindow(tkinter.Tk):
         for tree in self.secondaryTrees:
             tree.forget()
             tree.destroy()
+
+
         if result is None:
             return
         #print("result in secondary is",result)
         if result[0] == []:
             return
+
+        ###
+        ### identify the correct frame and canvas to put the widgets into
+        ###
+        frame = None
+        tabList = self.tabs.tabs()
+        ch = self.nametowidget(tabList[1])
+        for child in ch.winfo_children():
+            w = self.nametowidget(child)
+            if type(w) == tkinter.Canvas:
+                canvas = w
+                frame = w.winfo_children()[0]
+
         distances = result[1]
         result = result[0] # because result contains both track and distance data
         if len(result) > 0:
@@ -869,11 +1039,11 @@ class mainWindow(tkinter.Tk):
             cols = tuple(range(len(result[0][0]) + 1))
             totalWidth = len(cols) * width
             self.secondaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame2, columns=cols, show="headings", height=8))  ### journeytimes tree
+                ttk.Treeview(master=frame, columns=cols, show="headings", height=8))  ### journeytimes tree
             self.secondaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame2, columns=cols, show="headings", height=8))  ### durations tree
+                ttk.Treeview(master=frame, columns=cols, show="headings", height=8))  ### durations tree
             self.secondaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame2, columns=cols, show="headings", height=8))  ### speed tree
+                ttk.Treeview(master=frame, columns=cols, show="headings", height=8))  ### speed tree
 
             for tree in self.secondaryTrees:  ### set up the first column in all the trees
                 tree.column(0, width=width, anchor='center')
@@ -889,16 +1059,16 @@ class mainWindow(tkinter.Tk):
             self.secondaryTrees[1].heading(cols[-1], text="Total")
             self.secondaryTrees[2].heading(cols[-1], text="Average")
 
-            self.secondaryTrees.append(ttk.Treeview(master=self.matrixFrame2, columns=cols, height=1,
+            self.secondaryTrees.append(ttk.Treeview(master=frame, columns=cols, height=1,
                                               show="headings"))  ### average durations tree
             self.secondaryTrees[3].column(0, width=width, anchor='center')
             self.secondaryTrees[3].column(cols[-1], width=width, anchor="center")
             self.secondaryTrees.append(
-            ttk.Treeview(master=self.matrixFrame2, columns=cols, height=1, show="headings"))  #### average speed tree
+            ttk.Treeview(master=frame, columns=cols, height=1, show="headings"))  #### average speed tree
             self.secondaryTrees[4].column(0, width=width, anchor='center')
             self.secondaryTrees[4].column(cols[-1], width=width, anchor="center")
             self.secondaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame2, columns=cols, height=1,show="headings"))  #### distance tree
+                ttk.Treeview(master=frame, columns=cols, height=1,show="headings"))  #### distance tree
             self.secondaryTrees[5].column(0, width=width, anchor='center')
             self.secondaryTrees[5].column(cols[-1], width=width, anchor="center")
 
@@ -922,8 +1092,8 @@ class mainWindow(tkinter.Tk):
                     tree.column(i, width=width, anchor='center')
                     tree.heading(i, text='TP' + str(i) + ' - TP' + str(i + 1))
 
-            self.secondaryTrees[3].heading(0, text="Average")
-            self.secondaryTrees[4].heading(0, text="Average")
+            self.secondaryTrees[3].heading(0, text="")
+            self.secondaryTrees[4].heading(0, text="")
             self.secondaryTrees[5].heading(0, text="Distance")
             self.secondaryTrees[3].heading(len(result[0][0]), text="Total")
             self.secondaryTrees[4].heading(len(result[0][0]), text="Total")
@@ -939,12 +1109,13 @@ class mainWindow(tkinter.Tk):
 
             ###
             ### grid up the trees
+
             self.secondaryTrees[0].grid(row=0, column=0, pady=10, padx=10)
-            self.secondaryTrees[1].grid(row=1, column=0, pady=(10,0), padx=10)
-            self.secondaryTrees[2].grid(row=3, column=0, pady=(10,0), padx=10)
-            self.secondaryTrees[3].grid(row=2, column=0, pady=(0,10), padx=10)
-            self.secondaryTrees[4].grid(row=4, column=0, pady=(0,10), padx=10)
-            self.secondaryTrees[5].grid(row=5, column=0, pady=10, padx=10)
+            self.secondaryTrees[1].grid(row=1, column=0, pady=(0, 0), padx=10)
+            self.secondaryTrees[2].grid(row=3, column=0, pady=(10, 0), padx=10)
+            self.secondaryTrees[3].grid(row=2, column=0, pady=(10, 0), padx=10)
+            self.secondaryTrees[4].grid(row=4, column=0, pady=(10, 10), padx=10)
+            self.secondaryTrees[5].grid(row=5, column=0, pady=0, padx=10)
 
             ttk.Style().configure("Treeview", background="light grey")
 
@@ -955,12 +1126,12 @@ class mainWindow(tkinter.Tk):
             ####      Go through the results, add them to the various tables
             ####
             for i, r in enumerate(result):
-
+                print("displaying",r)
 
                 ### insert the journey times
 
-                times, speeds = r[1], r[2]
-                times.insert(0, "Track " + str(i + 1))
+                times, speeds = list(r[1]), list(r[2])
+                times.insert(0,  str(i + 1))
                 self.secondaryTrees[0].insert("", "end", iid=i+1, values=times)
 
                 ### insert the Durations
@@ -971,13 +1142,13 @@ class mainWindow(tkinter.Tk):
                     l.append(datetime.datetime.strptime(times[j + 1], "%H:%M:%S") - datetime.datetime.strptime(times[j],
                                                                                                                "%H:%M:%S"))
                 s = sum(l, datetime.timedelta())
-                l.insert(0, "Track " + str(i + 1))
+                l.insert(0,  str(i + 1))
                 l.insert(cols[-1], s)  ### insert
                 self.secondaryTrees[1].insert("", "end", iid=i+1, values=l)
 
                 ### insert the speeds
 
-                speeds.insert(0, "Track " + str(i + 1))
+                speeds.insert(0, str(i + 1))
                 self.secondaryTrees[2].insert("", "end", iid=i+1, values=speeds)
             if totalWidth < 500:
                 totalWidth = 500
@@ -1000,7 +1171,7 @@ class mainWindow(tkinter.Tk):
                 sum([datetime.timedelta(seconds=init.hour * 3600 + init.minute * 60 + init.second) for init in sublist],
                     datetime.timedelta(0)) / denom).split(".")[0] for sublist in
                  l]  # convert the datetimes to timedeltas, sum the timedeltas, get the average, convert to string, format the string removing decimal places etc
-            l.insert(0, "")
+            l.insert(0, "Average")
             #print(l)
             self.secondaryTrees[3].insert("", "end", values=l)
 
@@ -1018,7 +1189,8 @@ class mainWindow(tkinter.Tk):
             #print(l)
             l = [round(sum(item) / len(item), 2) for item in l]
             #print(l)
-            l.insert(0, "")
+            l.insert(0, "Average")
+            print(l)
             self.secondaryTrees[4].insert("", "end", values=l)
             self.check_tags(self.secondaryTrees,self.secondaryTrackList)
 
@@ -1028,6 +1200,7 @@ class mainWindow(tkinter.Tk):
 
         distances.insert(0,"")
         self.secondaryTrees[5].insert("","end",values=distances)
+        print("width of secondary tree is",self.secondaryTrees[0].winfo_width())
 
     def displayPrimary(self,result):
         for tree in self.primaryTrees:
@@ -1035,10 +1208,27 @@ class mainWindow(tkinter.Tk):
             tree.destroy()
         if result is None:
             return
-        #print("result in primary is", result)
-        #print("result is",result)
         if result[0] ==[]:
             return
+
+
+        ###
+        ### identify the correct frame and canvas to put the widgets into
+        ###
+        frame = None
+        tabList = self.tabs.tabs()
+        ch = self.nametowidget(tabList[0])
+        print("child of tab is", type(ch))
+        for child in ch.winfo_children():
+            w = self.nametowidget(child)
+            if type(w) == tkinter.Canvas:
+                canvas = w
+                frame = w.winfo_children()[0]
+        print(type(frame))
+        print("canvas size is", canvas.winfo_width(), canvas.winfo_height(), canvas.winfo_reqwidth(),
+              canvas.winfo_reqheight())
+        print("frame size is", frame.winfo_width(), frame.winfo_height(), frame.winfo_reqwidth(),
+              frame.winfo_reqheight())
 
         distances = result[1]
         result = result[0]
@@ -1048,19 +1238,21 @@ class mainWindow(tkinter.Tk):
             #####
             #####   Set up the new tables
             #####
-
-
+            style = ttk.Style()
+            style.configure("Treeview.Heading.label", font='helvetica 24')
+            #print(style.layout("Treeheading"))
+            #ttk.Style.configure(style="Treeview.Heading", foreground='white',bg="blue")
             self.primaryTrees = []
             labels = []
             width = 65
             cols = tuple(range(len(result[0][0]) + 1))
             totalWidth = len(cols) * width
             self.primaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame, columns=cols, show="headings", height=8))  ### journeytimes tree
+                ttk.Treeview(master=frame, columns=cols, show="headings", height=8))  ### journeytimes tree
             self.primaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame, columns=cols, show="headings", height=8))  ### durations tree
+                ttk.Treeview(master=frame, columns=cols, show="headings", height=8))  ### durations tree
             self.primaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame, columns=cols, show="headings", height=8))  ### speed tree
+                ttk.Treeview(master=frame, columns=cols, show="headings", height=8))  ### speed tree
 
             for tree in self.primaryTrees:  ### set up the first column in all the trees
                 tree.column(0, width=width, anchor='center')
@@ -1075,16 +1267,16 @@ class mainWindow(tkinter.Tk):
             self.primaryTrees[1].heading(cols[-1], text="Total")
             self.primaryTrees[2].heading(cols[-1], text="Average")
 
-            self.primaryTrees.append(ttk.Treeview(master=self.matrixFrame, columns=cols, height=1,
+            self.primaryTrees.append(ttk.Treeview(master=frame, columns=cols, height=1,
                                                   show="headings"))  ### average durations tree
             self.primaryTrees[3].column(0, width=width, anchor='center')
             self.primaryTrees[3].column(cols[-1], width=width, anchor="center")
             self.primaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame, columns=cols, height=1, show="headings"))  #### average speed tree
+                ttk.Treeview(master=frame, columns=cols, height=1, show="headings"))  #### average speed tree
             self.primaryTrees[4].column(0, width=width, anchor='center')
             self.primaryTrees[4].column(cols[-1], width=width, anchor="center")
             self.primaryTrees.append(
-                ttk.Treeview(master=self.matrixFrame, columns=cols, height=1, show="headings"))  #### distance tree
+                ttk.Treeview(master=frame, columns=cols, height=1, show="headings"))  #### distance tree
             self.primaryTrees[5].column(0, width=width, anchor='center')
             self.primaryTrees[5].column(cols[-1], width=width, anchor="center")
 
@@ -1102,8 +1294,8 @@ class mainWindow(tkinter.Tk):
                 for i in range(1, len(result[0][0])):
                     tree.heading(i, text='TP' + str(i) + ' - TP' + str(i + 1))
                     tree.column(i, width=width, anchor='center')
-            self.primaryTrees[3].heading(0,text="Average")
-            self.primaryTrees[4].heading(0, text="Average")
+            self.primaryTrees[3].heading(0,text="")
+            self.primaryTrees[4].heading(0, text="")
             self.primaryTrees[5].heading(0, text="Distance")
             self.primaryTrees[3].heading(len(result[0][0]), text="Total")
             self.primaryTrees[4].heading(len(result[0][0]), text="Total")
@@ -1120,11 +1312,11 @@ class mainWindow(tkinter.Tk):
             ###
             ### grid up the trees
             self.primaryTrees[0].grid(row=0, column=0, pady=10, padx=10)
-            self.primaryTrees[1].grid(row=1, column=0, pady=(10,0), padx=10)
+            self.primaryTrees[1].grid(row=1, column=0, pady=(0,0), padx=10)
             self.primaryTrees[2].grid(row=3, column=0, pady=(10,0), padx=10)
-            self.primaryTrees[3].grid(row=2, column=0, pady=(0,10), padx=10)
-            self.primaryTrees[4].grid(row=4, column=0, pady=(0,10), padx=10)
-            self.primaryTrees[5].grid(row=5, column=0, pady=10, padx=10)
+            self.primaryTrees[3].grid(row=2, column=0, pady=(10,0), padx=10)
+            self.primaryTrees[4].grid(row=4, column=0, pady=(10,10), padx=10)
+            self.primaryTrees[5].grid(row=5, column=0, pady=0, padx=10)
 
             ttk.Style().configure("Treeview", background="light grey")
 
@@ -1134,11 +1326,12 @@ class mainWindow(tkinter.Tk):
             ####
             ####      Go through the results, add them to the various tables
             ####
+
             for i, r in enumerate(result):
 
 
-                times, speeds = r[1], r[2]
-                times.insert(0, "Track " + str(i + 1))
+                times, speeds = list(r[1]), list(r[2])
+                times.insert(0,str(i + 1))
                 self.primaryTrees[0].insert("", "end", iid=i+1, values=times)
 
                 ### insert the Durations
@@ -1149,13 +1342,13 @@ class mainWindow(tkinter.Tk):
                     l.append(datetime.datetime.strptime(times[j + 1], "%H:%M:%S") - datetime.datetime.strptime(times[j],
                                                                                                                "%H:%M:%S"))
                 s = sum(l, datetime.timedelta())
-                l.insert(0, "Track " + str(i + 1))
+                l.insert(0, str(i + 1))
                 l.insert(cols[-1], s)  ### insert
                 self.primaryTrees[1].insert("", "end", iid=i+1, values=l)
 
                 ### insert the speeds
 
-                speeds.insert(0, "Track " + str(i + 1))
+                speeds.insert(0,str(i + 1))
                 self.primaryTrees[2].insert("", "end", iid=i+1, values=speeds)
 
             if totalWidth < 500:
@@ -1180,7 +1373,7 @@ class mainWindow(tkinter.Tk):
                 sum([datetime.timedelta(seconds=init.hour * 3600 + init.minute * 60 + init.second) for init in sublist],
                     datetime.timedelta(0)) / denom).split(".")[0] for sublist in
                  l]  # convert the datetimes to timedeltas, sum the timedeltas, get the average, convert to string, format the string removing decimal places etc
-            l.insert(0, "")
+            l.insert(0, "Average")
             #print(l)
             self.primaryTrees[3].insert("", "end", values=l)
 
@@ -1198,7 +1391,7 @@ class mainWindow(tkinter.Tk):
             #print(l)
             l = [round(sum(item) / len(item), 2) for item in l]
             #print(l)
-            l.insert(0, "")
+            l.insert(0, "Average")
             self.primaryTrees[4].insert("", "end", values=l)
             self.check_tags(self.primaryTrees,self.primaryTrackList)
 
@@ -1208,6 +1401,13 @@ class mainWindow(tkinter.Tk):
 
         distances.insert(0, "")
         self.primaryTrees[5].insert("", "end", values=distances)
+        canvas.configure(scrollregion=(0,0,frame.winfo_reqwidth(),794))
+        #frame.configure(width=self.primaryTrees[0].winfo_width())
+        print("canvas size is", canvas.winfo_width(), canvas.winfo_height(), canvas.winfo_reqwidth(),
+              canvas.winfo_reqheight())
+
+        print("frame size is", frame.winfo_width(), frame.winfo_height(), frame.winfo_reqwidth(),
+          frame.winfo_reqheight())
 
     def OnMouseWheel(self, event):
         self.journeyTimesTree.yview("scroll", -event.delta, "units")
@@ -1236,6 +1436,8 @@ class mainWindow(tkinter.Tk):
             self.getDateFunction = fun
         if text == "singleTrack":
             self.processSingleTrackFunction = fun
+        if text == "getSpeed":
+            self.getSpeedFunction = fun
 
     def change_zoom(self,val):
         routeName = self.routeListBox.get(self.routeListBox.curselection())
@@ -1289,6 +1491,7 @@ class mainWindow(tkinter.Tk):
                     pass
                 e.set(text)
                 print("loading",text)
+            self.unitsVar.set(int(f.readline().replace("\n","")))
 
     def saveSettings(self):
         with open('settings.txt', 'w') as f:
@@ -1298,6 +1501,7 @@ class mainWindow(tkinter.Tk):
                     f.write("\n")
                 else:
                     f.write(str(e.get()) + "\n")
+            f.write(str(self.unitsVar.get()) + "\n")
 
 def wrapper_function(fun,routeName,file):
     result = fun(routeName,file)

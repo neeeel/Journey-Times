@@ -8,6 +8,7 @@ import win32com.client
 import pandas as pd
 import numpy as np
 import tkinter
+from tkinter import ttk
 import mapmanager
 from PIL import Image,ImageDraw,ImageTk
 
@@ -64,6 +65,19 @@ def rollWheel(event):
   x,y=mapMan.get_coords(centre,zoom)
   canvas.create_oval([x - 5, y - 5, x + 5, y + 5], fill="red",width=0)
   print("zoom is",zoom)
+
+
+
+tab = ttk.Notebook()
+print(tab["style"],tab.winfo_class())
+print(ttk.Style().layout("TNotebook"))
+exit()
+
+
+
+
+df = pd.load_pickle("")
+
 
 x,y =(800,800)
 zoom = 800

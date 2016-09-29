@@ -26,6 +26,9 @@ def truncate(f, n):
     i, p, d = s.partition('.')
     return float('.'.join([i, (d+'0'*n)[:n]]))
 
+def miles_to_km(miles):
+    return miles * 1.60934
+
 def getDistInMiles(p1,p2):
     #print("processibng",p1,p2)
     if p1 == p2:
@@ -41,7 +44,7 @@ def getDist(p1,p2):
     #y=truncate(y,5)
     x = float(x)
     y = float(y)
-    print(p1,x,y)
+    #print(p1,x,y)
     #x1 = truncate(x1, 5)
     #y1 = truncate(y1, 5)
     xdiff = abs(x1-x)

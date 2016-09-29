@@ -95,7 +95,7 @@ class MapManager():
 
     def get_coords(self,coords,size=800):
         ## takes a lat and long pair, converts them to x,y coordinates that refer to where on the drawing canvas the point is, given that we know the lat,lon of the centre point of the map
-        print("in getcoords, size is",size)
+        #print("in getcoords, size is",size)
         point = self.latlontopixels(coords)
         centre = self.latlontopixels((self.center_lat,self.center_lon))
         x = centre[0]-point[0]
