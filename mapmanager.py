@@ -122,10 +122,11 @@ class MapManager():
         #print("markers is",markers)
         for p in path[::step]:
             pathString+= str(p[0]) + "," + str(p[1]) + "%7C"
-        pathString = pathString[:-3]
+        #pathString = pathString[:-3]
+        pathString += str(path[-1][0]) + "," + str(path[-1][1])
         #print(pathString)
         url = "http://maps.googleapis.com/maps/api/staticmap?&size=" + str(self.map_width) + "x" + str(self.map_height) + markers + pathString
-        #print(url)
+        print("url for route map is",url)
         buffer = urllib.request.urlopen(url)
         image = Image.open(buffer).convert('RGB')
         #image.show()

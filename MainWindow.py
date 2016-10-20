@@ -376,6 +376,7 @@ class mainWindow(tkinter.Tk):
         excelImage = openpyxl.drawing.image.Image(img)
         self.startProgress("Exporting to Excel")
         self.progressWin.update()
+        surveyDate = self.getDateFunction(1)
         wb = openpyxl.load_workbook("template.xlsm",keep_vba=True)
         sheets = wb.get_sheet_names()
         wb.get_sheet_by_name(sheets[0]).add_image(excelImage,"B3")
@@ -387,7 +388,7 @@ class mainWindow(tkinter.Tk):
         except Exception as e:
             print(e)
             return
-        tpCount = len(self.selectedRoute.get_timing_points()[0])
+        tpCount = len(timingPoints)
         for i,child in enumerate(trees[0].get_children()):
             self.progress.step()
             self.progressWin.update()
@@ -429,18 +430,7 @@ class mainWindow(tkinter.Tk):
         #for i,child in enumerate(trees[2].get_children()):
             for j in range(tpCount):
                 sheet.cell(row=2 + i, column=j + (2 * tpCount) + 2).value = trees[2].item(run)["values"][j + 1]
-        if self.check3.get() == 1:
-            ###
-            ### dump raw data to the excel sheet
-            ###
-            for i,data in enumerate(trackList):
-                try:
-                    data = self.getTrack(data)
-                    data["Track No"] = "Track " + str(runsList[i])
-                    data[["Track No","Record", "Time", "Lat", "Lon", "legTime", "legSpeed"]].apply(lambda x: rawData.append(x.tolist()), axis=1)
-                except Exception as e:
-                    pass
-                    ### total hack, if we have deleted some runs and try to dump the data, when we look for track x
+
 
         sheet["A1"] = AMRuns
         sheet["B1"] = self.entryValues[0].get()
@@ -452,10 +442,11 @@ class mainWindow(tkinter.Tk):
         sheet["H1"] = self.entryValues[4].get()
         sheet["I1"] = self.entryValues[5].get()
         sheet["J1"] = tpCount
+        sheet["K1"] = surveyDate
 
         if self.getTrack != None:
             self.mapMan = mapmanager.MapManager(640, 640, 12, timingPoints[0], timingPoints)
-            self.trackData = self.getTrack(trackList[0])
+            self.trackData = self.getTrack(trackList[1])
         offset=trackList[0][0]
         for i,t in enumerate(trackList[0][:-1]):
             self.progress.step()
@@ -474,21 +465,43 @@ class mainWindow(tkinter.Tk):
         sheet = wb.get_sheet_by_name('Location - Distance')
         sheet.add_image(excelImage,"B13")
 
-        sheet = wb.get_sheet_by_name('Raw Data')
-        for i,row in enumerate(rawData):
-            #print("row",row)
-            self.progress.step()
-            self.progressWin.update()
-            for j,item in enumerate(row):
-                sheet.cell(row=i+1,column=j+1).value = item
+        if self.check3.get() == 1:
+            ###
+            ### dump raw data to the excel sheet
+            ###
+            for i, data in enumerate(trackList):
+                try:
+                    data = self.getTrack(data)
+                    data["Track No"] = "Track " + str(runsList[i])
+                    data[["Track No", "Record", "Time", "Lat", "Lon", "legTime", "legSpeed"]].apply(
+                        lambda x: rawData.append(x.tolist()), axis=1)
+                    sheet = wb.get_sheet_by_name('Raw Data')
+                    for i, row in enumerate(rawData):
+                        self.progress.step()
+                        self.progressWin.update()
+                        for j, item in enumerate(row):
+                            sheet.cell(row=i + 1, column=j + 1).value = item
+                except Exception as e:
+                    pass
+                    ### total hack, if we have deleted some runs and try to dump the data, when we look for track x
+        else:
+            try:
+                sht = wb.get_sheet_by_name("Raw Data")
+                wb.remove_sheet(sht)
+            except Exception as e:
+                pass  ### we tried to remove the raw data sheet, but it already didnt exist
 
-        wb.save(filename +".xlsm")
-        xl = win32com.client.Dispatch("Excel.Application")
-        xl.Workbooks.Open(Filename=filename + ".xlsm", ReadOnly=1)
-        xl.Application.Run("formatfile")
-        xl.Workbooks(1).Close(SaveChanges=1)
-        xl.Application.Quit()
-        xl = 0
+        try:
+            wb.save(filename +".xlsm")
+            xl = win32com.client.Dispatch("Excel.Application")
+            xl.Workbooks.Open(Filename=filename + ".xlsm", ReadOnly=1)
+            xl.Application.Run("formatfile")
+            xl.Workbooks(1).Close(SaveChanges=1)
+            xl.Application.Quit()
+            xl = 0
+        except PermissionError as e:
+            messagebox.showinfo(message="cannot save file- " + filename + " workbook is already open, please close and run export again")
+
         self.excel_settings_closed()
         self.stopProgress()
 
@@ -644,7 +657,7 @@ class mainWindow(tkinter.Tk):
 
         if self.getTrack != None:
             self.mapMan = mapmanager.MapManager(640,640,12,TPs[0],TPs)
-            routeName = self.routeListBox.get(self.routeListBox.curselection())
+            #routeName = self.routeListBox.get(self.routeListBox.curselection())
             #for k, v in self.routes.items():
                 #print("looking for ", routeName, v.name)
                 #if v.name == routeName:
@@ -667,6 +680,8 @@ class mainWindow(tkinter.Tk):
     def draw_track(self,event):
         if self.trackData is None:
             return
+        #print(self.trackData.head())
+        #print(self.trackData.tail())
         if len(self.trackTree.selection()) >0:
             index = (self.trackTree.index(self.trackTree.selection()[0]))
         else:
@@ -676,7 +691,7 @@ class mainWindow(tkinter.Tk):
             #print("speed is",speed,"legindex is",self.previousLegIndex)
             if speed > 75:
                 speed  = 75
-            self.trackData.apply(lambda row: self.draw_leg((row["Lat"], row["Lon"]), (row["latNext"], row["lonNext"]), row["legSpeed"]), axis=1)
+            self.trackData[:-1].apply(lambda row: self.draw_leg((row["Lat"], row["Lon"]), (row["latNext"], row["lonNext"]), row["legSpeed"]), axis=1)
         if index >=0:
             speed = float(self.trackData.iloc[self.previousLegIndex]["legSpeed"])
             #print("speed is",speed)
@@ -840,7 +855,6 @@ class mainWindow(tkinter.Tk):
         self.check3.set(0)
         tkinter.Button(frame,text = "Export",command = self.export).grid(row  = 5,column  =0,padx=10, pady=10)
         tkinter.Button(frame, text="Exit", command = self.excel_settings_closed).grid(row=5, column=1,padx=10, pady=10)
-
 
     def spawn_settings_window(self):
         self.settingsWindow = tkinter.Toplevel(self)
@@ -1440,6 +1454,8 @@ class mainWindow(tkinter.Tk):
             self.getSpeedFunction = fun
 
     def change_zoom(self,val):
+        if len(self.routeListBox.curselection()) ==0:
+            return
         routeName = self.routeListBox.get(self.routeListBox.curselection())
 
         for k, v in self.routes.items():

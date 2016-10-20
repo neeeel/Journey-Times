@@ -30,12 +30,22 @@ def miles_to_km(miles):
     return miles * 1.60934
 
 def getDistInMiles(p1,p2):
-    #print("processibng",p1,p2)
     if p1 == p2:
         return 0
     lat1,long1 = p1
     lat2,long2 = p2
-    return (math.acos((math.cos(math.radians(90 - lat1)) * math.cos(math.radians(90-lat2))) + ((math.sin(math.radians(90 - lat1)) * math.sin(math.radians(90-lat2))) * math.cos(math.radians(long1-long2))))*6371000) * 0.000621371
+    try:
+        result = (math.cos(math.radians(90 - lat1)) * math.cos(math.radians(90-lat2))) + ((math.sin(math.radians(90 - lat1)) * math.sin(math.radians(90-lat2))) * math.cos(math.radians(long1-long2)))
+        if result > 1:
+            print("OH NO",result)
+            result = 1
+        return (math.acos(result) * 6371000) * 0.000621371
+    except ValueError as e:
+        return 0
+
+
+
+
 
 def getDist(p1,p2):
     x,y = p1
@@ -58,11 +68,7 @@ def get_bearing(p1,p2):
                          math.cos(lat1) *math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))) + 360) % 360
     return bearing
 
-
-points = [(56.40324, -4.64206),(56.381749999999997, -4.6372099999999996)]
-points1 = [(56.40324, -4.64206),(56.386969999999998, -4.62052)]
-56.386969999999998, -4.62052
-print(getDist(points[0],points[1]))
+points = [(54.16979, -4.44681), (54.1696, -4.44694)]
+#print(math.acos(1.000000))
 print(getDistInMiles(points[0],points[1]))
-print(getDist(points1[0],points1[1]))
-print(getDistInMiles(points1[0],points1[1]))
+

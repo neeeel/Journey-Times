@@ -66,33 +66,6 @@ def rollWheel(event):
   canvas.create_oval([x - 5, y - 5, x + 5, y + 5], fill="red",width=0)
   print("zoom is",zoom)
 
-
-
-tab = ttk.Notebook()
-print(tab["style"],tab.winfo_class())
-print(ttk.Style().layout("TNotebook"))
-exit()
-
-
-
-
-df = pd.load_pickle("")
-
-
-x,y =(800,800)
-zoom = 800
-centre = (56.395105869067294,-4.631289999999994)
-TPs  = [(56.40324, -4.64206),(56.386969999999998, -4.62052)]
-mapMan = mapmanager.MapManager(640,640,12,TPs[0],TPs)
-img = mapMan.get_thumbnail()
-#img.show()
-win = tkinter.Tk()
-canvas = tkinter.Canvas(win,width =800,height = 800)
-canvas.bind("<MouseWheel>",rollWheel)
-canvas.bind("<B1-Motion>",mouseMove)
-canvas.bind("<Button-1>",mouseClick)
-canvas.grid(row = 0,column=0)
-baseImage = Image.open("map.jpg")
-mapImage = ImageTk.PhotoImage(baseImage)
-item = canvas.create_image(0, 0, image=mapImage, anchor=tkinter.NW)
-win.mainloop()
+l=[1,2,3]
+l.insert(-1,2)
+print(l)
