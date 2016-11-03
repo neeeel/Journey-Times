@@ -120,11 +120,11 @@ def load_csv(file):
             df = df.drop(["Unnamed: 7"], axis=1)
         l = ["Time","Record", "Lat", "Lon"]
         df.columns = l
-
+        #df["Time"] = df["Time"] + pd.DateOffset(hours=1)
         ###
         ### convert the gps data into WSG 84
         ###
-        df.Lat = df.Lat.apply(ut.latTOdddd)
+        df.Lat =df.Lat.apply(ut.latTOdddd)
         df.Lon = df.Lon.apply(ut.lonTOdddd)
 
 
@@ -138,6 +138,9 @@ def load_csv(file):
         df["legDist"] = df.apply(get_leg_distance,axis=1)
         #print("converting leg speeds")
         df["legSpeed"] = df.apply(lambda row: round(row["legDist"]*3600/int(row["legTime"]) /abs((row["timeNext"] -  row["Time"])/ np.timedelta64(1, 's')),2) if row["legTime"] != 0 else 0,axis =1)
+        df.to_csv("dumped.csv")
+    except PermissionError as e:
+        print("couldnt dump data")
     except Exception as e:
         messagebox.showinfo("error","Tried to load csv file, incorrect format")
         print("____________________________________________OOPS_____________________________________________________")
@@ -178,6 +181,9 @@ def load_gpx(file):
         df["lonNext"] = df["Lon"].shift(-1)
         df = df.dropna()
         df["Time"] = pd.to_datetime(df["Time"])
+        print(df.head())
+        #df["Time"] = df["Time"] + pd.DateOffset(hours=1)
+        print(df.head())
         df["timeNext"] = df["Time"].shift(-1)
         df["timeNext"].iloc[-1] = df["Time"].iloc[-1]
         df["legTime"] = df.apply(lambda row: abs((row["timeNext"] - row["Time"]) / np.timedelta64(1, 's')),
@@ -545,7 +551,8 @@ def process_direction(timingPoints,pointsInRoute,coords):
         distList.append(result[1])
 
     print("track list at end is",finalList)
-
+    finalList = sorted(finalList, key=lambda x: x[1][0])
+    print("after sorting, track list at end is", finalList)
     #print("after calculation, distList is",distList)
       #
 
@@ -555,7 +562,7 @@ def process_direction(timingPoints,pointsInRoute,coords):
         distList = [round(sum(i) / len(distList), 3) for i in zip(*distList)]
     return [finalList,distList,discardedList]
 
-def processRoutes(route,file):
+def processRoutes(route,fileList):
     ###
     ### we are passed route info ( as a route object) , and want to get the gps data and cut it up, for both directions of
     ### the route
@@ -572,13 +579,17 @@ def processRoutes(route,file):
         d1 +=ut.getDist(timingPoints[i], timingPoints[i+1])
     d2 = 0.0003 # rough distance between 2 points when travelling at abuot 40 mph
     pointsInRoute = int(d1/d2) ##rough estimate of how many points will be travelled in 1 route
-
-    if ".csv" in file:
-        print("loading csv")
-        df = load_csv(file)
-    if ".gpx" in file:
-        print("loading gpx")
-        df = load_gpx(file)
+    print("points in route is",pointsInRoute)
+    dataframes=[]
+    for file in fileList:
+        if ".csv" in file:
+            print("loading csv")
+            temp = load_csv(file)
+        if ".gpx" in file:
+            print("loading gpx")
+            temp = load_gpx(file)
+        dataframes.append(temp)
+    df = pd.concat(dataframes)
     if df is None:
         print("nothing loaded, returning")
         window.display_data(None)
@@ -647,7 +658,8 @@ def getStartPoints(coords,tpStart,tpEnd,pointsInRoute):
             if temp == []:
                 temp.append(p)
             else:
-                if p < temp[-1] + pointsInRoute:
+                if (df.iloc[p]["Time"] - df.iloc[temp[-1]]["Time"]).total_seconds() <30 and (df.iloc[p]["Time"] - df.iloc[temp[-1]]["Time"]).total_seconds() >0:
+                #if p < temp[-1] + (pointsInRoute/2):
                     temp.append(p)
                 else:
                     break
@@ -668,7 +680,7 @@ def getStartPoints(coords,tpStart,tpEnd,pointsInRoute):
 
             while temp[0] < cutOffIndex:
                 del temp[0]
-            #print("after dealing with cutoff index, temp is ", temp)
+            print("after dealing with cutoff index, temp is ", temp)
 
             ## sort the selected timing points with regard to closeness to start point, closest is first
 
@@ -798,14 +810,11 @@ def get_temp_end_point(startIndex,endIndex,tpEnd,pointsInRoute):
     ### cutoffIndex to find the point closest to tpEnd
     ###
 
-    diff = (
-    datetime.datetime.strptime(df.iloc[endIndex]["Time"].strftime('%H:%M:%S'), "%H:%M:%S") -
-    datetime.datetime.strptime(df.iloc[startIndex]["Time"].strftime('%H:%M:%S'), "%H:%M:%S")).total_seconds()
-    #print("diff is",diff)
+
     longestLeg = np.array(df[["legTime"]][startIndex:endIndex].idxmax())[0]
     if df["legTime"].iloc[longestLeg] > 20:
         cutOffIndex = longestLeg
-        #print("setting cut off index to ", cutOffIndex)
+        print("setting cut off index to ", cutOffIndex)
     tempdf = df.iloc[startIndex + 1:cutOffIndex + 1]
     lats = tempdf["Lat"].tolist()
     lons = tempdf["Lon"].tolist()
@@ -813,17 +822,27 @@ def get_temp_end_point(startIndex,endIndex,tpEnd,pointsInRoute):
     if len(coords) < 2:
         return -1
     tree = spatial.KDTree(coords)
-    result = tree.query(np.array(tpEnd), 15,distance_upper_bound=0.0009) ### gives us the 5 points closest to end point that fall between startIndex and endIndex
+    #result = tree.query(np.array(tpEnd), 15)
+    #print("result without dist bound is", result)
+    result = tree.query(np.array(tpEnd), 15,distance_upper_bound=0.0095) ### gives us the 5 points closest to end point that fall between startIndex and endIndex
     print("result is", result)
     if np.isinf(result[0][0]):
         print("discarding",(startIndex,endIndex))
         return None
 
+
+    ###
+    ### dont remember exactly why I added this check in, except that I wanted to select the furthest point in time,
+    ### where there was no big jump, so that I could work backwards ( I remember there was some route that had a problem
+    ### if I just selected the nearest point. )
+    ###
+
     sortedIndexes = sorted(result[1]) # sort the indexes so that we can select a max, but not have a jump bigger than 10 or so
     maxValue = sortedIndexes[0]
     for index,value in enumerate(sortedIndexes):
-        if not np.isinf(result[0][index]) and value > maxValue and value <maxValue + 10:
+        if not np.isinf(result[0][index]) and value > maxValue and value < maxValue + 10:
             maxValue = value
+
     print("temp selected end point is ",maxValue, "actual value returned is ",maxValue + startIndex)
     return maxValue + startIndex
 
@@ -872,7 +891,11 @@ def get_final_end_point(startIndex,endIndex,tp,tpEnd):
 file = "C:/Users/NWatson/Desktop/London JoPro job/GPS logger file day 1 - Tablet/20161013 route 2.gpx"
 #df = load_gpx(file)
 #print(df.head())
-#print(df.iloc[91])
+#print(df.iloc[92]["Time"] - df.iloc[91]["Time"])
+#if (df.iloc[92]["Time"] - df.iloc[91]["Time"]).total_seconds() > 10:
+    #print("oh phoo")
+#else:
+    #print("hurrah")
 #print(df.info())
 #mask = df["legSpeed"] == np.inf
 #print(df[mask])

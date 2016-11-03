@@ -422,7 +422,11 @@ class mainWindow(tkinter.Tk):
             self.progress.step()
             self.progressWin.update()
             for j in range(tpCount):
-                sheet.cell(row=2+i,column = 1 + j).value = trees[0].item(run)["values"][j + 1]
+                if self.check4.get() == 1:
+                    ### add on an hour
+                    sheet.cell(row=2 + i, column=1 + j).value =  datetime.datetime.strftime(datetime.datetime.strptime(trees[0].item(run)["values"][j + 1],"%H:%M:%S")+datetime.timedelta(hours=1),"%H:%M:%S")
+                else:
+                    sheet.cell(row=2+i,column = 1 + j).value = trees[0].item(run)["values"][j + 1]
             sheet.cell(row = 2+i,column = 1 + tpCount).value = self.getDateFunction(trackList[i][0])
         #for i,child in enumerate(trees[1].get_children()):
             for j in range(tpCount):
@@ -805,13 +809,13 @@ class mainWindow(tkinter.Tk):
             self.journeyLabel.configure(text="Journey Time Summary")
             return
 
-        file = filedialog.askopenfilename(initialdir=dir)
-        if file == "":
+        fileList = list(filedialog.askopenfilenames(initialdir=dir))
+        if fileList == []:
             self.mapLabel.configure(text="Map")
             self.journeyLabel.configure(text="Journey Time Summary")
             return
         self.selectedRoute = self.routes[routeName]
-        threading.Thread(target=wrapper_function,args = (self.fun,self.routes[routeName],file)).start()
+        threading.Thread(target=wrapper_function,args = (self.fun,self.routes[routeName],fileList)).start()
         self.startProgress("Loading and Processing Data")
         self.mapLabel.configure(text="Map - " + routeName)
         self.journeyLabel.configure(text="Journey Time Summary - " + routeName)
@@ -850,11 +854,14 @@ class mainWindow(tkinter.Tk):
         tkinter.Checkbutton(frame, text="Secondary",variable = self.check2).grid(row=4, column=1)
         self.check3 = tkinter.IntVar()
         tkinter.Checkbutton(frame, text="Export Raw Data",variable = self.check3).grid(row=4, column=2)
+        self.check4 = tkinter.IntVar()
+        tkinter.Checkbutton(frame, text="Add 1 Hour to Times", variable=self.check4).grid(row=5, column=1)
         self.check1.set(1)
         self.check2.set(1)
         self.check3.set(0)
-        tkinter.Button(frame,text = "Export",command = self.export).grid(row  = 5,column  =0,padx=10, pady=10)
-        tkinter.Button(frame, text="Exit", command = self.excel_settings_closed).grid(row=5, column=1,padx=10, pady=10)
+        self.check4.set(0)
+        tkinter.Button(frame,text = "Export",command = self.export).grid(row  = 6,column  =0,padx=10, pady=10)
+        tkinter.Button(frame, text="Exit", command = self.excel_settings_closed).grid(row=6, column=1,padx=10, pady=10)
 
     def spawn_settings_window(self):
         self.settingsWindow = tkinter.Toplevel(self)
@@ -1519,8 +1526,8 @@ class mainWindow(tkinter.Tk):
                     f.write(str(e.get()) + "\n")
             f.write(str(self.unitsVar.get()) + "\n")
 
-def wrapper_function(fun,routeName,file):
-    result = fun(routeName,file)
+def wrapper_function(fun,routeName,fileList):
+    result = fun(routeName,fileList)
     #self.q.put(result)
     return
 

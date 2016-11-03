@@ -66,6 +66,10 @@ def rollWheel(event):
   canvas.create_oval([x - 5, y - 5, x + 5, y + 5], fill="red",width=0)
   print("zoom is",zoom)
 
-l=[1,2,3]
-l.insert(-1,2)
-print(l)
+l=[[[1560, 883], ['07:30:24', '07:57:19'], [12.84, 12.84]], [[1531, 1832], ['16:15:36', '16:40:41'], [13.890000000000001, 13.890000000000001]], [[1880, 2114], ['06:45:24', '07:04:54'], [17.690000000000001, 17.690000000000001]]]
+l = sorted(l,key=lambda x: x[1][0])
+s = "07:00:01"
+
+print(datetime.datetime.strftime(datetime.datetime.strptime(s,"%H:%M:%S")+datetime.timedelta(hours=1),"%H:%M:%S"))
+
+

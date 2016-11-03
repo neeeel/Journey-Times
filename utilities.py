@@ -68,7 +68,9 @@ def get_bearing(p1,p2):
                          math.cos(lat1) *math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))) + 360) % 360
     return bearing
 
-points = [(54.16979, -4.44681), (54.1696, -4.44694)]
+points = [(52.06444,-2.71141), (52.08491, -2.75716)] ## route 4 dodgy point, route 4 end point
 #print(math.acos(1.000000))
 print(getDistInMiles(points[0],points[1]))
+print(getDist(points[0],points[1]))
+
 
