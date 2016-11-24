@@ -12,6 +12,8 @@ from tkinter import messagebox
 import threading
 import queue
 import copy
+import time
+import os
 
 
 
@@ -318,7 +320,7 @@ class mainWindow(tkinter.Tk):
 
     def export(self):
         file = filedialog.asksaveasfilename()
-        #print(file)
+        print(file)
         if file == "":
             messagebox.showinfo(message="no file name entered, exiting Export")
             return
@@ -357,6 +359,8 @@ class mainWindow(tkinter.Tk):
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[1]]
             self.export_to_excel(self.secondaryTrees, TPs, self.secondaryTrackList,file + " " + secondaryDirection)
 
+
+
     def export_to_excel(self,trees,timingPoints,trackList,filename):
         AMRuns = 0
         IPRuns = 0
@@ -377,11 +381,15 @@ class mainWindow(tkinter.Tk):
         self.startProgress("Exporting to Excel")
         self.progressWin.update()
         surveyDate = self.getDateFunction(1)
-        wb = openpyxl.load_workbook("template.xlsm",keep_vba=True)
+        wb = openpyxl.load_workbook("Template.xlsm",keep_vba=True)
         sheets = wb.get_sheet_names()
-        wb.get_sheet_by_name(sheets[0]).add_image(excelImage,"B3")
+        print("first sheet is",sheets[0])
+        #wb.get_sheet_by_name(sheets[0]).add_image(excelImage,"B3")
         for sht in sheets[1:-1]:
             sheet = wb.get_sheet_by_name(sht)
+            img = Image.open("tracsis Logo.jpg")
+            imgSmall = img.resize((184, 65), Image.ANTIALIAS)
+            excelImageSmall = openpyxl.drawing.image.Image(imgSmall)
             sheet.add_image(excelImageSmall,"A1")
         try:
             sheet = wb.get_sheet_by_name('Temp')
@@ -469,6 +477,9 @@ class mainWindow(tkinter.Tk):
         sheet = wb.get_sheet_by_name('Location - Distance')
         sheet.add_image(excelImage,"B13")
 
+
+
+
         if self.check3.get() == 1:
             ###
             ### dump raw data to the excel sheet
@@ -486,6 +497,7 @@ class mainWindow(tkinter.Tk):
                         for j, item in enumerate(row):
                             sheet.cell(row=i + 1, column=j + 1).value = item
                 except Exception as e:
+                    print("PHOOO")
                     pass
                     ### total hack, if we have deleted some runs and try to dump the data, when we look for track x
         else:
@@ -493,18 +505,26 @@ class mainWindow(tkinter.Tk):
                 sht = wb.get_sheet_by_name("Raw Data")
                 wb.remove_sheet(sht)
             except Exception as e:
+                print("PHOOO")
                 pass  ### we tried to remove the raw data sheet, but it already didnt exist
 
         try:
             wb.save(filename +".xlsm")
             xl = win32com.client.Dispatch("Excel.Application")
-            xl.Workbooks.Open(Filename=filename + ".xlsm", ReadOnly=1)
+            xl.Application.Visible = True
+            filename = filename+".xlsm"
+            print("trying to open workbook",os.path.realpath(filename))
+            time.sleep(0.5)
+            xl.Workbooks.Open(Filename=os.path.realpath(filename), ReadOnly=1)
+            #xl.Workbooks.Open(Filename=os.path.realpath("C:/Users/NWatson/PycharmProjects/JourneyTimes/blah" + ".xlsm"), ReadOnly=1)
             xl.Application.Run("formatfile")
             xl.Workbooks(1).Close(SaveChanges=1)
-            xl.Application.Quit()
+            #xl.Application.Quit()
             xl = 0
         except PermissionError as e:
             messagebox.showinfo(message="cannot save file- " + filename + " workbook is already open, please close and run export again")
+        #except Exception as e:
+            #print("couldnt save",e)
 
         self.excel_settings_closed()
         self.stopProgress()
