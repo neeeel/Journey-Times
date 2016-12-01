@@ -512,19 +512,22 @@ class mainWindow(tkinter.Tk):
             wb.save(filename +".xlsm")
             xl = win32com.client.Dispatch("Excel.Application")
             xl.Application.Visible = True
+            xlsFile = os.path.realpath(filename + ".xlsx")
             filename = filename+".xlsm"
-            print("trying to open workbook",os.path.realpath(filename))
+            print("trying to open workbook",os.path.realpath(filename),xlsFile)
             time.sleep(0.5)
-            xl.Workbooks.Open(Filename=os.path.realpath(filename), ReadOnly=1)
+            wb = xl.Workbooks.Open(Filename=os.path.realpath(filename), ReadOnly=1)
             #xl.Workbooks.Open(Filename=os.path.realpath("C:/Users/NWatson/PycharmProjects/JourneyTimes/blah" + ".xlsm"), ReadOnly=1)
             xl.Application.Run("formatfile")
+            xl.displayalerts = False
+            #xl.ActiveWorkbook.SaveAs(Filename=xlsFile, FileFormat=51)
             xl.Workbooks(1).Close(SaveChanges=1)
-            #xl.Application.Quit()
+            xl.Application.Quit()
             xl = 0
         except PermissionError as e:
             messagebox.showinfo(message="cannot save file- " + filename + " workbook is already open, please close and run export again")
-        #except Exception as e:
-            #print("couldnt save",e)
+        except Exception as e:
+            print("couldnt save",e)
 
         self.excel_settings_closed()
         self.stopProgress()
@@ -1544,6 +1547,7 @@ class mainWindow(tkinter.Tk):
                     f.write("\n")
                 else:
                     f.write(str(e.get()) + "\n")
+            print("writing ", self.unitsVar.get())
             f.write(str(self.unitsVar.get()) + "\n")
 
 def wrapper_function(fun,routeName,fileList):

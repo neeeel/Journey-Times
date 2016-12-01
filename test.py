@@ -410,16 +410,16 @@ def process_direction(timingPoints,pointsInRoute,coords):
         ### and startpoint x+ 1, so we use this to search
 
         startList.append(segments[i+1]) ### to catch any runs that happen at the end of the data
-        for i in range(len(startList[:-1])):
-            ep = get_temp_end_point(startList[i],startList[i+1],endPointToLookFor,pointsInRoute)
+        for index in range(len(startList[:-1])):
+            ep = get_temp_end_point(startList[index],startList[index+1],endPointToLookFor,pointsInRoute)
             if ep is None: ### we get back None if there was a problem finding the end point for some reason
                 pass
             else:
-                track= [startList[i],ep]
+                track= [startList[index],ep]
                 trackList.append(track)
 
 
-        print("after getting starting points, tracklist is",trackList)
+        print("after getting starting point and temp end points, tracklist is",trackList)
         ###
         ### deal with the intermediate timing points, if any, between the start and end point. This is simple
         ### we know that there can only be 1 closest point between the estimated start and end points
@@ -444,27 +444,33 @@ def process_direction(timingPoints,pointsInRoute,coords):
                 p = get_final_end_point(t[-2],t[-1],timingPoints[-3],timingPoints[-2])
             else:
                 p = get_final_end_point(t[-2], t[-1], timingPoints[-2], timingPoints[-1])
-            del t[-1]
-            t.append(p)
+            if not p is None:
+                del t[-1]
+                t.append(p)
+            else:
+                del t[-1]
+                t.append(-1)
+
             p = get_final_start_point(t[0],t[1],timingPoints[0],timingPoints[1])
             if not p is None: ## we need the start point to compare to for the previous runs end point
                 del t[0]
                 t.insert(0,p)
-
+        trackList = [t for t in trackList if -1 not in t]
         print("before calculating final point, track list is",trackList)
 
         ###
         ### if the there are more than 2 timing points, then we havent calculated the end point yet
         ###
         if len(timingPoints)>2:
-            for i,track in enumerate(trackList):
+            for j,track in enumerate(trackList):
                 print("&&&")
                 startIndex = track[-1] ## the last point we have calculated for this track
                 try:
-                    nextStartPoint = trackList[i+1][0]
+                    nextStartPoint = trackList[j+1][0]
                 except IndexError as e:
-                    nextStartPoint = len(df)
+                    nextStartPoint = segments[i+1] ### need to alter this so that we get end of segment rather than end of dataframe
                 try:
+                    print("dealing with ",startIndex,nextStartPoint)
                     while True:
 
                         dist= ut.getDistInMiles ((df.iloc[startIndex]["Lat"],df.iloc[startIndex]["Lon"]),timingPoints[-1])
@@ -475,13 +481,15 @@ def process_direction(timingPoints,pointsInRoute,coords):
 
 
                             endPoint = get_final_end_point(track[-1],selectedPoint,timingPoints[-2],timingPoints[-1])
-
-                            ### is our end point after the next start point? If so, we can discard this run
-                            if endPoint < nextStartPoint:
-                                track.append(endPoint)
-                            else:
+                            if endPoint is None:
                                 track.append(-1)
-                            break
+                            else:
+                                ### is our end point after the next start point? If so, we can discard this run
+                                if endPoint < nextStartPoint:
+                                    track.append(endPoint)
+                                else:
+                                    track.append(-1)
+                                break
                         startIndex+=1
                 except IndexError as e:
                     track.append(-1)
@@ -584,7 +592,7 @@ def processRoutes(route,fileList):
         window.display_data(None)
         messagebox.showinfo("error", "Invalid data file,must be .csv or .gpx, or please check format of data")
         return
-
+    print(df.head())
     df.sort_values(by=["Time"], inplace=True)
     df = df.reset_index(drop=True)
     del df["Record"]
@@ -605,16 +613,9 @@ def processRoutes(route,fileList):
         row["legDist"] * 3600 / int(row["legTime"]) / abs((row["timeNext"] - row["Time"]) / np.timedelta64(1, 's')),
         2) if row["legTime"] != 0 else 0, axis=1)
 
-    try:
-        df.to_csv("dumped.csv")
-    except PermissionError as e:
-        pass
 
-    print(df.iloc[2010:2020])
-    try:
-        df.to_csv("dumped.csv")
-    except Exception as e:
-        pass
+
+
 
 
 
@@ -634,6 +635,27 @@ def processRoutes(route,fileList):
     result.append(process_direction(timingPoints,pointsInRoute,coords))
     timingPoints = [(x[2], x[3]) for x in route.get_timing_points()[1]]
     result.append(process_direction(timingPoints, pointsInRoute, coords))
+
+    try:
+        df["OS Grid Reference"] = ""
+        df["Name"] = ""
+        df["Information"] = ""
+        df["Name 2"] = ""
+        df["Altitude"] = 0
+        df["Proximity"]=0
+        df["Symbol name"] = "Dot"
+        df["Route or Track name"] = "Track"
+        df["Colour name"] = ""
+        df.to_csv("dumped.csv",columns=["OS Grid Reference","Lat","Lon","Name","Information","Name 2","Time","Altitude","Proximity","Symbol name","Route or Track name","Colour name"],
+                  header = ["OS Grid Reference","Latitude","Longitude","Name","Information","Name 2","Date and Time","Altitude","Proximity","Symbol name","Route or Track name","Colour name"])
+        writer = pd.ExcelWriter('Output in POI Coverter Format.xls')
+        df.to_excel(writer, sheet_name='Tracks',columns=["OS Grid Reference","Lat","Lon","Name","Information","Name 2","Time","Altitude","Proximity","Symbol name","Route or Track name","Colour name"],
+                    header=["OS Grid Reference", "Latitude", "Longitude", "Name", "Information", "Name 2", "Date and Time","Altitude", "Proximity", "Symbol name", "Route or Track name", "Colour name"],index=False)
+
+        writer.save()
+    except PermissionError as e:
+        pass
+
     window.receive_processed_data(result)
 
 def getTrack(track):
@@ -828,7 +850,7 @@ def get_closest_point_to_intermediate_point(startIndex,endIndex,tp):
     if len(coords) < 2:
         return -1 ## I had startIndex -1 , I have no idea why
     tree = spatial.KDTree(coords)
-    result = tree.query(np.array(tp),k=5,distance_upper_bound=0.009)
+    result = tree.query(np.array(tp),k=5,distance_upper_bound=0.005)
     if np.isinf(result[0][0]):
         return -1
     closestPointIndex = result[1][0]
@@ -853,7 +875,7 @@ def get_temp_end_point(startIndex,endIndex,tpEnd,pointsInRoute):
     if len(coords) < 2:
         return -1
     tree = spatial.KDTree(coords)
-    result = tree.query(np.array(tpEnd), 15,distance_upper_bound=0.0095) ### gives us the 5 points closest to end point that fall between startIndex and endIndex
+    result = tree.query(np.array(tpEnd), 15,distance_upper_bound=0.0015) ### gives us the 5 points closest to end point that fall between startIndex and endIndex
     print("result is", result)
     if np.isinf(result[0][0]):
         print("discarding",(startIndex,endIndex))
@@ -907,8 +929,11 @@ def get_final_end_point(startIndex,endIndex,tp,tpEnd):
             maxIndex = i
     print("point with max dist from tp is ",startIndex + maxIndex)
     tree = spatial.KDTree(coords[:maxIndex + 1])
-    result = tree.query(np.array(tpEnd), 1)
+    result = tree.query(np.array(tpEnd), 1,distance_upper_bound=0.0015)
     print("result is",result)
+    if np.isinf(result[0]):
+        print("discarding",(startIndex,endIndex))
+        return None
     print("final end point result is ", result[1] + startIndex,"adjusted from",endIndex)
     return result[1] + startIndex
     print("determined end point as ",tempdf.iloc[result])

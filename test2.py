@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from fastkml import kml
+#from fastkml import kml
 #import MainWindow
 import datetime
 import pandas as pd
@@ -11,6 +11,22 @@ import tkinter
 from tkinter import ttk
 import mapmanager
 from PIL import Image,ImageDraw,ImageTk
+
+import tkinter
+import tkinter.ttk as ttk
+import tkinter.font as font
+import datetime
+import mapmanager
+import openpyxl
+import win32com.client
+from PIL import Image,ImageDraw,ImageTk
+from tkinter import filedialog
+from tkinter import messagebox
+import threading
+import queue
+import copy
+import time
+import os
 
 try:
   from lxml import etree
@@ -66,10 +82,32 @@ def rollWheel(event):
   canvas.create_oval([x - 5, y - 5, x + 5, y + 5], fill="red",width=0)
   print("zoom is",zoom)
 
-l=[[[1560, 883], ['07:30:24', '07:57:19'], [12.84, 12.84]], [[1531, 1832], ['16:15:36', '16:40:41'], [13.890000000000001, 13.890000000000001]], [[1880, 2114], ['06:45:24', '07:04:54'], [17.690000000000001, 17.690000000000001]]]
-l = sorted(l,key=lambda x: x[1][0])
-s = "07:00:01"
-
-print(datetime.datetime.strftime(datetime.datetime.strptime(s,"%H:%M:%S")+datetime.timedelta(hours=1),"%H:%M:%S"))
 
 
+f = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/test p.xlsm"
+f1 = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/test p.xls"
+t = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/frseedrrhjryrud"
+#f1 ="C:/Users/NWatson/PycharmProjects/JourneyTimes/blah" + ".xlsm"
+
+
+wb = openpyxl.load_workbook("Template.xlsm",keep_vba=True)
+sheets = wb.get_sheet_names()
+image = Image.open("map.jpg")
+excelImage = openpyxl.drawing.image.Image(image)
+sheet = wb.get_sheet_by_name('Location - Distance')
+sheet.add_image(excelImage,"B13")
+print(sheets[0])
+#wb.get_sheet_by_name(sheets[0]).add_image(excelImage,"B3")
+wb.save(t)
+
+print(os.path.realpath(f1))
+
+xl = win32com.client.Dispatch("Excel.Application")
+xl.Application.Visible = True
+xl.Workbooks.Open(Filename=f1 , ReadOnly=1)
+print(xl.Workbooks(1))
+xl.Application.Run("formatfile")
+xl.displayalerts = False
+xl.ActiveWorkbook.SaveAs(Filename=f1,FileFormat=56)
+xl.Workbooks(1).Close(SaveChanges=1)
+xl.Application.Quit()
