@@ -98,6 +98,43 @@ class Route():
         for tp in self.timingPoints:
             print(tp[0],tp[1]," : ",tp[2],tp[3])
 
+
+
+def load_gsd(file):
+    ###
+    ### load the GPS data from the GSD file into a pandas dataframe
+    ### if theres any sort of error we just abort
+    ###
+
+    global df
+
+    if ".gsd" not in file:
+        df = None
+        messagebox.showinfo("error", "selected file is not a csv,gpx or gsd file")
+        return
+    try:
+        data = pd.read_table(file)
+        cleaned_data = []
+        for row in data.values.tolist():
+            result = parse_gsd(row)
+            if not result is None:
+                #print(result)
+                cleaned_data.append(result)
+        df = pd.DataFrame(cleaned_data)
+        df.columns = ["Lat", "Lon", "Time"]
+        #df["Date"].apply(pd.to_datetime)
+
+        df["Time"].apply(np.datetime64)
+        df = df.reset_index(drop=True)
+        df.index.name = "Record"
+        df.reset_index(inplace=True)
+        print(df.head())
+        print(df.info())
+        #df.to_csv("dumped.csv")
+    except PermissionError as e:
+        print("couldnt dump data")
+    return df
+
 def load_csv(file):
     ###
     ### load the GPS data from the CSV file into a pandas dataframe
@@ -471,26 +508,24 @@ def process_direction(timingPoints,pointsInRoute,coords):
                     nextStartPoint = segments[i+1] ### need to alter this so that we get end of segment rather than end of dataframe
                 try:
                     print("dealing with ",startIndex,nextStartPoint)
-                    while True:
+                    #while True:
 
-                        dist= ut.getDistInMiles ((df.iloc[startIndex]["Lat"],df.iloc[startIndex]["Lon"]),timingPoints[-1])
+                        #dist= ut.getDistInMiles ((df.iloc[startIndex]["Lat"],df.iloc[startIndex]["Lon"]),timingPoints[-1])
                         #print("dist is",dist)
-                        if dist < 0.05:
-                            selectedPoint = startIndex + 50 # so that hopefully we go past the end point, and can work backwards
-                            print("selected point",selectedPoint)
+                        #if dist < 0.05:
+                            #selectedPoint = startIndex + 50 # so that hopefully we go past the end point, and can work backwards
+                            #print("selected point",selectedPoint)
 
 
-                            endPoint = get_final_end_point(track[-1],selectedPoint,timingPoints[-2],timingPoints[-1])
-                            if endPoint is None:
-                                track.append(-1)
-                            else:
-                                ### is our end point after the next start point? If so, we can discard this run
-                                if endPoint < nextStartPoint:
-                                    track.append(endPoint)
-                                else:
-                                    track.append(-1)
-                                break
-                        startIndex+=1
+                    endPoint = get_final_end_point(startIndex,nextStartPoint,timingPoints[-2],timingPoints[-1])
+                    if endPoint is None:
+                        track.append(-1)
+                    else:
+                        ### is our end point after the next start point? If so, we can discard this run
+                        if endPoint < nextStartPoint:
+                            track.append(endPoint)
+                        else:
+                            track.append(-1)
                 except IndexError as e:
                     track.append(-1)
                     break
@@ -585,6 +620,9 @@ def processRoutes(route,fileList):
         if ".gpx" in file:
             print("loading gpx")
             temp = load_gpx(file)
+        if ".gsd" in file:
+            print("loading gsd")
+            temp = load_gsd(file)
         dataframes.append(temp)
     df = pd.concat(dataframes)
     if df is None:
@@ -712,7 +750,7 @@ def getStartPoints(dataStart,dataEnd,tpStart,tpEnd,pointsInRoute):
                 temp.append(p)
             else:
                 #print(p,temp[-1],df.iloc[p]["Time"], df.iloc[temp[-1]]["Time"],(df.iloc[p]["Time"] - df.iloc[temp[-1]]["Time"]).total_seconds())#,temp[-1],df.iloc[p]["Time"].total_seconds(), df.iloc[temp[-1]]["Time"]).total_seconds(),df.iloc[p]["Time"].total_seconds() - df.iloc[temp[-1]]["Time"].total_seconds())
-                if (df.iloc[p]["Time"] - df.iloc[temp[-1]]["Time"]).total_seconds() <30 and (df.iloc[p]["Time"] - df.iloc[temp[-1]]["Time"]).total_seconds() >0:
+                if (df.iloc[p]["Time"] - df.iloc[temp[-1]]["Time"]).total_seconds() <30 and (df.iloc[p]["Time"] - df.iloc[temp[-1]]["Time"]).total_seconds() >=0:
                 #if p < temp[-1] + (pointsInRoute/2):
                     temp.append(p)
                 else:
@@ -938,12 +976,39 @@ def get_final_end_point(startIndex,endIndex,tp,tpEnd):
     return result[1] + startIndex
     print("determined end point as ",tempdf.iloc[result])
 
+def parse_gsd(row):
+    #print(type(row))
+    if type(row[0]) == str:
+        data = row[0].split(",")
+        if len(data) == 6:
+            data[0] = data[0][data[0].index("=")+1:]
+            data[0] = float(data[0][:2] + "." + data[0][2:])
+            if data[1][0] == "-":
+                data[1] = float(data[1][:2] + "." + data[1][2:])
+            else:
+                data[1] = float(data[1][:1] + "." + data[1][1:])
+            yr = data[3][-2:]
+            mnth = data[3][-4:-2]
+            if len(data[3]) == 5:
+                day = data[3][0]
+            else:
+                day = data[3][:2]
+
+            sec = data[2][-2:]
+            min = data[2][-4:-2]
+            if len(data[2]) == 5:
+                hr = data[2][0]
+            else:
+                hr = data[2][:2]
+            return [data[0],data[1],datetime.datetime(int("20" + yr),int(mnth),int(day),int(hr),int(min),int(sec),0,None)]
+        return None
 
 
 
+file = "C:/Users/NWatson/Desktop/3360-WAL Bridgewater JT/Journey Time Routes/Route 1(2).gsd"
+#load_gsd(file)
+#exit()
 
-#file = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/Week 2/route 1.gpx"
-#df = load_gpx(file)
 #print(df.head())
 #print(df.iloc[92]["Time"] - df.iloc[91]["Time"])
 #if (df.iloc[92]["Time"] - df.iloc[91]["Time"]).total_seconds() > 10:

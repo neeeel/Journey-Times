@@ -355,11 +355,19 @@ class mainWindow(tkinter.Tk):
         if self.check1.get() == 1:
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[0]]
             self.export_to_excel(self.primaryTrees,TPs,self.primaryTrackList,file + " " + primaryDirection)
+            folder = os.path.dirname(os.path.abspath(__file__))
+            folder = os.path.join(folder, "Runs\\")
+            for file in os.listdir(folder):
+                file_path = os.path.join(folder, file)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                except Exception as e:
+                    print(e)
+            self.save_track_as_image(self.primaryTrackList)
         if self.check2.get() == 1:
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[1]]
             self.export_to_excel(self.secondaryTrees, TPs, self.secondaryTrackList,file + " " + secondaryDirection)
-
-
 
     def export_to_excel(self,trees,timingPoints,trackList,filename):
         AMRuns = 0
@@ -391,6 +399,13 @@ class mainWindow(tkinter.Tk):
             imgSmall = img.resize((184, 65), Image.ANTIALIAS)
             excelImageSmall = openpyxl.drawing.image.Image(imgSmall)
             sheet.add_image(excelImageSmall,"A1")
+        try:
+            sheet = wb.get_sheet_by_name('Maps')
+            for i in range(0, 4):
+                sheet.cell(row=7+i,column=16).value = self.entryValues[8 + i].get()
+                sheet.cell(row=7 + i, column=18).value = self.entryValues[8 + i+1].get()
+        except Exception as e:
+            print(e)
         try:
             sheet = wb.get_sheet_by_name('Temp')
         except Exception as e:
@@ -435,6 +450,8 @@ class mainWindow(tkinter.Tk):
                     sheet.cell(row=2 + i, column=1 + j).value =  datetime.datetime.strftime(datetime.datetime.strptime(trees[0].item(run)["values"][j + 1],"%H:%M:%S")+datetime.timedelta(hours=1),"%H:%M:%S")
                 else:
                     sheet.cell(row=2+i,column = 1 + j).value = trees[0].item(run)["values"][j + 1]
+            print(trackList[i][0])
+            print(self.getDateFunction(trackList[i][0]))
             sheet.cell(row = 2+i,column = 1 + tpCount).value = self.getDateFunction(trackList[i][0])
         #for i,child in enumerate(trees[1].get_children()):
             for j in range(tpCount):
@@ -736,6 +753,43 @@ class mainWindow(tkinter.Tk):
             #self.colour_gradient["r"][speed], self.colour_gradient["g"][speed], self.colour_gradient["b"][speed])
             self.draw_leg((self.trackData.iloc[index]["Lat"],self.trackData.iloc[index]["Lon"]),(self.trackData.iloc[index]["latNext"],self.trackData.iloc[index]["lonNext"]),-1)
             self.previousLegIndex = index
+
+    def save_track_as_image(self,trackList):
+        for i,track in enumerate(trackList):
+            image = Image.open("map.jpg").convert('RGB')
+            image1 = ImageTk.PhotoImage(image)
+            drawimage = ImageDraw.Draw(image)
+            trackData = self.getTrack(track)
+            trackData[:-1].apply(lambda row: self.draw_leg_on_image((row["Lat"], row["Lon"]), (row["latNext"], row["lonNext"]), row["legSpeed"],drawimage),axis=1)
+            t = datetime.datetime.strftime(trackData.iloc[0]["Time"],"%H:%M:%S")
+            drawimage.text((10,10),text = t)
+            image.save("Runs/track " + str(i+1) + ".jpg")
+
+
+    def draw_leg_on_image(self,p1,p2,speed,drawImage):
+        colours = [(0,0,0), (255,0,0), (255,215,0),(46,139,87), (0,191,255)]
+        if speed == -1:
+            colour = "white"
+        else:
+            flag = False
+            for i in range(0, 8, 2):
+                #print(i, speed, self.entryValues[8 + i].get(), self.entryValues[8 + i + 1].get())
+                if speed >= float(self.entryValues[8 + i].get()) and speed <= float(self.entryValues[8 + i + 1].get()):
+                    colour = colours[int(i / 2)]
+                    flag = True
+                    #print("colour is", colour)
+            if speed > float(self.entryValues[16].get()):
+                colour = colours[-1]
+                flag = True
+            if not flag:
+                colour = "white"
+        x, y = self.mapMan.get_coords(p1)
+        drawImage.ellipse([x - 5, y - 5, x + 5, y + 5], fill=colour)
+        x1, y1 = self.mapMan.get_coords(p2)
+        drawImage.ellipse([x1 - 5, y1 - 5, x1 + 5, y1 + 5], fill=colour)
+        drawImage.line([x, y, x1, y1], fill=colour, width=6)
+
+
 
     def draw_leg(self,p1, p2, speed):
         #print("in leg speed, speed is",speed)

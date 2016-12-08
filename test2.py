@@ -89,25 +89,28 @@ f1 = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/
 t = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/frseedrrhjryrud"
 #f1 ="C:/Users/NWatson/PycharmProjects/JourneyTimes/blah" + ".xlsm"
 
+folder = os.path.dirname(os.path.abspath(__file__))
+print(folder)
+folder = os.path.join(folder,"Runs\\")
+print(folder)
+for file in os.listdir(folder):
+    file_path = os.path.join(folder,file)
+    try:
+        if os.path.isfile(file_path):
+            os.unlink(file_path)
+    except Exception as e:
+        print(e)
 
-wb = openpyxl.load_workbook("Template.xlsm",keep_vba=True)
-sheets = wb.get_sheet_names()
-image = Image.open("map.jpg")
-excelImage = openpyxl.drawing.image.Image(image)
-sheet = wb.get_sheet_by_name('Location - Distance')
-sheet.add_image(excelImage,"B13")
-print(sheets[0])
-#wb.get_sheet_by_name(sheets[0]).add_image(excelImage,"B3")
-wb.save(t)
-
-print(os.path.realpath(f1))
-
-xl = win32com.client.Dispatch("Excel.Application")
-xl.Application.Visible = True
-xl.Workbooks.Open(Filename=f1 , ReadOnly=1)
-print(xl.Workbooks(1))
-xl.Application.Run("formatfile")
-xl.displayalerts = False
-xl.ActiveWorkbook.SaveAs(Filename=f1,FileFormat=56)
-xl.Workbooks(1).Close(SaveChanges=1)
-xl.Application.Quit()
+exit()
+win = tkinter.Tk()
+canvas = tkinter.Canvas(win)
+canvas.pack()
+image = Image.open("map.jpg").convert('RGB')
+image1 = ImageTk.PhotoImage(image)
+drawimage = ImageDraw.Draw(image)
+canvas.create_image(0, 0, image = image1, anchor = tkinter.NW)
+canvas.create_line(100,100,200,200,width=4)
+drawimage.line([100,100,200,200])
+drawimage.text((0,0),text="wertoweirtjeroteto",fill="black")
+image.save("Runs/poo.jpg")
+win.mainloop()
