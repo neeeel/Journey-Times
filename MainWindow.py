@@ -6,7 +6,7 @@ import datetime
 import mapmanager
 import openpyxl
 import win32com.client
-from PIL import Image,ImageDraw,ImageTk
+from PIL import Image,ImageDraw,ImageTk,ImageFont
 from tkinter import filedialog
 from tkinter import messagebox
 import threading
@@ -279,6 +279,7 @@ class mainWindow(tkinter.Tk):
             #self.routes[routeName].get_map().show()
             #print("img size is",self.thumbnail.width(),self.thumbnail.height())
             self.thumbnailCanvas.create_image(10, 10, image=self.thumbnail, anchor=tkinter.NW)
+            self.mapMan = self.routes[routeName].getMapManager()
             #for tps in self.routes[routeName].get_timing_points():
                 #for point in tps:
                     #self.TPListBox.insert(tkinter.END,point)
@@ -354,19 +355,33 @@ class mainWindow(tkinter.Tk):
             secondaryDirection = "Clockwise"
         if self.check1.get() == 1:
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[0]]
-            self.export_to_excel(self.primaryTrees,TPs,self.primaryTrackList,file + " " + primaryDirection)
             folder = os.path.dirname(os.path.abspath(__file__))
             folder = os.path.join(folder, "Runs\\")
-            for file in os.listdir(folder):
-                file_path = os.path.join(folder, file)
+            for fileName in os.listdir(folder):
+                file_path = os.path.join(folder, fileName)
                 try:
                     if os.path.isfile(file_path):
                         os.unlink(file_path)
                 except Exception as e:
                     print(e)
             self.save_track_as_image(self.primaryTrackList)
+            self.export_to_excel(self.primaryTrees,TPs,self.primaryTrackList,file + " " + primaryDirection)
+
+
         if self.check2.get() == 1:
+            folder = os.path.dirname(os.path.abspath(__file__))
+            print(folder)
+            folder = os.path.join(folder, "Runs\\")
+            print(folder)
+            for fileName in os.listdir(folder):
+                file_path = os.path.join(folder, fileName)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                except Exception as e:
+                    print(e)
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[1]]
+            self.save_track_as_image(self.secondaryTrackList, direction="s")
             self.export_to_excel(self.secondaryTrees, TPs, self.secondaryTrackList,file + " " + secondaryDirection)
 
     def export_to_excel(self,trees,timingPoints,trackList,filename):
@@ -393,6 +408,21 @@ class mainWindow(tkinter.Tk):
         sheets = wb.get_sheet_names()
         print("first sheet is",sheets[0])
         #wb.get_sheet_by_name(sheets[0]).add_image(excelImage,"B3")
+
+        ###
+        ### put big logo on front sheet
+        ##
+
+        sheet = wb.get_sheet_by_name(sheets[0])
+        img = Image.open("tracsis Logo.jpg")
+        imgSmall = img.resize((368, 130), Image.ANTIALIAS)
+        excelImageSmall = openpyxl.drawing.image.Image(imgSmall)
+        sheet.add_image(excelImageSmall, "B3")
+
+        ###
+        ### put little logos on the other sheets
+        ###
+
         for sht in sheets[1:-1]:
             sheet = wb.get_sheet_by_name(sht)
             img = Image.open("tracsis Logo.jpg")
@@ -401,9 +431,10 @@ class mainWindow(tkinter.Tk):
             sheet.add_image(excelImageSmall,"A1")
         try:
             sheet = wb.get_sheet_by_name('Maps')
-            for i in range(0, 4):
-                sheet.cell(row=7+i,column=16).value = self.entryValues[8 + i].get()
-                sheet.cell(row=7 + i, column=18).value = self.entryValues[8 + i+1].get()
+            for i in range(0, 8,2):
+                sheet.cell(row=7+int(i/2),column=16).value = int(self.entryValues[8 + i].get())
+                sheet.cell(row=7 +int(i/2), column=18).value = int(self.entryValues[8 + i+1].get())
+            sheet.cell(row=11, column=16).value = self.entryValues[16].get() + "+"
         except Exception as e:
             print(e)
         try:
@@ -472,6 +503,12 @@ class mainWindow(tkinter.Tk):
         sheet["I1"] = self.entryValues[5].get()
         sheet["J1"] = tpCount
         sheet["K1"] = surveyDate
+        folder = os.path.dirname(os.path.abspath(__file__))
+        print(folder)
+        folder = os.path.join(folder, "Runs\\")
+        sheet["L1"]=folder
+
+
 
         if self.getTrack != None:
             self.mapMan = mapmanager.MapManager(640, 640, 12, timingPoints[0], timingPoints)
@@ -484,7 +521,7 @@ class mainWindow(tkinter.Tk):
             #print("dist between tps is",self.trackData["legDist"][self.trackList[0][i]-offset:self.trackList[0][i+1]-offset].sum())
             values = trees[5].item(trees[5].get_children()[0])["values"][1:]
             print("values are",values)
-            sheet.cell(row=1,column = 11+i).value = values[i]
+            sheet.cell(row=1,column = 13+i).value = values[i]
         lats = self.trackData["Lat"].tolist()
         lons = self.trackData["Lon"].tolist()
         pathData = list(zip(lats, lons))
@@ -754,17 +791,25 @@ class mainWindow(tkinter.Tk):
             self.draw_leg((self.trackData.iloc[index]["Lat"],self.trackData.iloc[index]["Lon"]),(self.trackData.iloc[index]["latNext"],self.trackData.iloc[index]["lonNext"]),-1)
             self.previousLegIndex = index
 
-    def save_track_as_image(self,trackList):
+    def save_track_as_image(self,trackList,direction="p"):
         for i,track in enumerate(trackList):
-            image = Image.open("map.jpg").convert('RGB')
-            image1 = ImageTk.PhotoImage(image)
+            try:
+                if direction=="p":
+                    image = Image.open("map.jpg").convert('RGB')
+                else:
+                    image = Image.open("sec_map.jpg").convert('RGB')
+            except Exception as e:
+                print(e)
+                return
+            #image1 = ImageTk.PhotoImage(image)
+            fnt = ImageFont.truetype("arial", size=18)
             drawimage = ImageDraw.Draw(image)
             trackData = self.getTrack(track)
             trackData[:-1].apply(lambda row: self.draw_leg_on_image((row["Lat"], row["Lon"]), (row["latNext"], row["lonNext"]), row["legSpeed"],drawimage),axis=1)
             t = datetime.datetime.strftime(trackData.iloc[0]["Time"],"%H:%M:%S")
-            drawimage.text((10,10),text = t)
+            drawimage.rectangle([0, 0, 100, 50], fill="white")
+            drawimage.text((10, 10), text=t, font=fnt, fill="black")
             image.save("Runs/track " + str(i+1) + ".jpg")
-
 
     def draw_leg_on_image(self,p1,p2,speed,drawImage):
         colours = [(0,0,0), (255,0,0), (255,215,0),(46,139,87), (0,191,255)]
@@ -788,8 +833,6 @@ class mainWindow(tkinter.Tk):
         x1, y1 = self.mapMan.get_coords(p2)
         drawImage.ellipse([x1 - 5, y1 - 5, x1 + 5, y1 + 5], fill=colour)
         drawImage.line([x, y, x1, y1], fill=colour, width=6)
-
-
 
     def draw_leg(self,p1, p2, speed):
         #print("in leg speed, speed is",speed)
@@ -906,7 +949,7 @@ class mainWindow(tkinter.Tk):
         self.labels = []
         for i in range(6):
             self.labels.append(tkinter.Label(frame,anchor = tkinter.CENTER))
-            self.entryValues.append(tkinter.StringVar())
+            #self.entryValues.append(tkinter.StringVar())
         self.labels[0].config(text="AM Times")
         self.labels[1].config(text="IP Times")
         self.labels[2].config(text="PM Times")
@@ -920,7 +963,7 @@ class mainWindow(tkinter.Tk):
             self.labels[3+i].grid(row=i, column=2, padx=5, pady=5)
             tkinter.Entry(frame, textvariable=self.entryValues[(2*i)+1], width=7).grid(row=i, column=3, padx=2, pady=2)
         tkinter.Label(frame,text = "Primary Direction").grid(row = 3,column = 0)
-        self.entryValues.append(tkinter.StringVar())
+        #self.entryValues.append(tkinter.StringVar())
         self.cbox = ttk.Combobox(frame,values=["North","South", "East","West", "Clockwise","Anticlockwise"],width = 13)
         self.cbox.grid(row = 3 ,column = 1)
         self.cbox.current(0)

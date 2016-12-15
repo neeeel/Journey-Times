@@ -19,7 +19,7 @@ import datetime
 import mapmanager
 import openpyxl
 import win32com.client
-from PIL import Image,ImageDraw,ImageTk
+from PIL import Image,ImageDraw,ImageTk,ImageFont
 from tkinter import filedialog
 from tkinter import messagebox
 import threading
@@ -89,6 +89,15 @@ f1 = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/
 t = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/frseedrrhjryrud"
 #f1 ="C:/Users/NWatson/PycharmProjects/JourneyTimes/blah" + ".xlsm"
 
+fnt = ImageFont.truetype("arial",size = 15)
+image = Image.open("map.jpg").convert('RGB')
+t = datetime.datetime.strftime(datetime.datetime.now(),"%H:%M:%S")
+fnt = ImageFont.truetype("arial", size=18)
+drawimage = ImageDraw.Draw(image)
+drawimage.rectangle([0,0,100,50],fill="white")
+drawimage.text((10,10),text = t,font=fnt,fill="black")
+image.save("track " + str(1) + ".jpg")
+
 folder = os.path.dirname(os.path.abspath(__file__))
 print(folder)
 folder = os.path.join(folder,"Runs\\")
@@ -100,6 +109,7 @@ for file in os.listdir(folder):
             os.unlink(file_path)
     except Exception as e:
         print(e)
+
 
 exit()
 win = tkinter.Tk()

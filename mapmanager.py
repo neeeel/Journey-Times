@@ -25,6 +25,7 @@ class MapManager():
         #self.center_lon = coords[1]
 
         self.static_map = self.load_map(self.center_lat, self.center_lon)
+        self.load_map(self.center_lat, self.center_lon,direction="s")
         #self.load_thumbnail(self.center_lat, self.center_lon)
         #self.static_map.show()
         #self.static_map.show()
@@ -106,7 +107,6 @@ class MapManager():
         return (size/2) - x, (size/2) + y
 
     def get_map_with_path(self,tps,path):
-        #print("length of path is ",len(path))
         base = 65
         step = int(len(path) / 150) + 1
         noOfPoints = len(path) * 12
@@ -116,33 +116,33 @@ class MapManager():
         markers += "&markers=color:green%7Clabel:A%7C" + str(self.tps[0][0]) + "," + str(self.tps[0][1])
         for i, tp in enumerate(self.tps[1:-1]):
             markers += "&markers=color:blue%7Clabel:" + chr(i + 1 + base) + "%7C" + str(tp[0]) + "," + str(tp[1])
-        markers += "&markers=color:Red%7Clabel:" + chr(len(self.tps) - 1 + base) + "%7C" + str(
-            self.tps[-1][0]) + "," + str(self.tps[-1][1])
-
-        #print("markers is",markers)
+        markers += "&markers=color:Red%7Clabel:" + chr(len(self.tps) - 1 + base) + "%7C" + str(self.tps[-1][0]) + "," + str(self.tps[-1][1])
         for p in path[::step]:
             pathString+= str(p[0]) + "," + str(p[1]) + "%7C"
-        #pathString = pathString[:-3]
         pathString += str(path[-1][0]) + "," + str(path[-1][1])
-        #print("lenght of pathstring is "  & len(pathString))
         url = "http://maps.googleapis.com/maps/api/staticmap?&size=" + str(self.map_width) + "x" + str(self.map_height) + markers + pathString + "&key=AIzaSyAQl_6HX3wWlZRpG96XDhdDWZ07_3R6Df4"
         print("url for route map is",url)
         buffer = urllib.request.urlopen(url)
         image = Image.open(buffer).convert('RGB')
-        #image.show()
         return image
 
     def change_zoom(self,val):
         self.zoom+=val
         return self.load_map(self.center_lat, self.center_lon)
 
-    def load_map(self,lat,lon):
+    def load_map(self,lat,lon,direction="p"):
         markers = ""
         base = 65
-        markers += "&markers=color:green%7Clabel:A%7C" + str(self.tps[0][0]) + "," + str(self.tps[0][1])
-        for i, tp in enumerate(self.tps[1:-1]):
+        if direction=="p":
+            timingPoints = self.tps
+        else:
+            print("secondary map")
+            timingPoints = list(reversed(self.tps))
+
+        markers += "&markers=color:green%7Clabel:A%7C" + str(timingPoints[0][0]) + "," + str(timingPoints[0][1])
+        for i, tp in enumerate(timingPoints[1:-1]):
             markers += "&markers=color:blue%7Clabel:" + chr(i + 1 + base) + "%7C" + str(tp[0]) + "," + str(tp[1])
-        markers += "&markers=color:Red%7Clabel:" + chr(len(self.tps) -1 + base) + "%7C" + str(self.tps[-1][0]) + "," + str(self.tps[-1][1])
+        markers += "&markers=color:Red%7Clabel:" + chr(len(timingPoints) -1 + base) + "%7C" + str(timingPoints[-1][0]) + "," + str(timingPoints[-1][1])
         #print("markers is", markers)
         url = "http://maps.googleapis.com/maps/api/staticmap?center=" + str(lat) + "," + str(lon) + "&size=" + str(self.map_width) + "x" + str(self.map_height) + "&zoom=" + str(self.zoom) + "&sensor=false&scale=2" + markers + "&key=AIzaSyAQl_6HX3wWlZRpG96XDhdDWZ07_3R6Df4"
         print(url)
@@ -152,8 +152,10 @@ class MapManager():
         image = image.resize ((val,val),Image.ANTIALIAS)
         self.map_height=val
         self.map_width = val
-        image.save('map.jpg')
-        #image.show()
+        if direction=="p":
+            image.save('map.jpg')
+        else:
+            image.save("sec_map.jpg")
         return image
 
     def get_thumbnail(self):
