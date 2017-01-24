@@ -357,6 +357,8 @@ class mainWindow(tkinter.Tk):
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[0]]
             folder = os.path.dirname(os.path.abspath(__file__))
             folder = os.path.join(folder, "Runs\\")
+            if not os.path.exists(folder):
+                os.makedirs(folder)
             for fileName in os.listdir(folder):
                 file_path = os.path.join(folder, fileName)
                 try:
@@ -373,6 +375,8 @@ class mainWindow(tkinter.Tk):
             print(folder)
             folder = os.path.join(folder, "Runs\\")
             print(folder)
+            if not os.path.exists(folder):
+                os.makedirs(folder)
             for fileName in os.listdir(folder):
                 file_path = os.path.join(folder, fileName)
                 try:
@@ -795,11 +799,15 @@ class mainWindow(tkinter.Tk):
         for i,track in enumerate(trackList):
             try:
                 if direction=="p":
-                    image = Image.open("map.jpg").convert('RGB')
+                    #image = Image.open(self.mapMan.get_map()).convert('RGB')
+                    image = self.mapMan.get_map().copy()
+                    print("image is ",image,type(image))
                 else:
-                    image = Image.open("sec_map.jpg").convert('RGB')
+                    image = self.mapMan.get_sec_map().copy()
+                    #image = Image.open(self.mapMan.get_sec_map()).convert('RGB')
+                    print("image is ", image, type(image))
             except Exception as e:
-                print(e)
+                print("image error",e)
                 return
             #image1 = ImageTk.PhotoImage(image)
             fnt = ImageFont.truetype("arial", size=18)
@@ -809,7 +817,9 @@ class mainWindow(tkinter.Tk):
             t = datetime.datetime.strftime(trackData.iloc[0]["Time"],"%H:%M:%S")
             drawimage.rectangle([0, 0, 100, 50], fill="white")
             drawimage.text((10, 10), text=t, font=fnt, fill="black")
-            image.save("Runs/track " + str(i+1) + ".jpg")
+            folder = os.path.dirname(os.path.abspath(__file__))
+            folder = os.path.join(folder, "Runs\\")
+            image.save(folder + "/track " + str(i+1) + ".jpg")
 
     def draw_leg_on_image(self,p1,p2,speed,drawImage):
         colours = [(0,0,0), (255,0,0), (255,215,0),(46,139,87), (0,191,255)]
@@ -1258,7 +1268,7 @@ class mainWindow(tkinter.Tk):
             self.secondaryTrees[4].grid(row=4, column=0, pady=(10, 10), padx=10)
             self.secondaryTrees[5].grid(row=5, column=0, pady=0, padx=10)
 
-            ttk.Style().configure("Treeview", background="light grey")
+            ttk.Style().configure("Treeview", background="grey")
 
             self.secondaryTrackList = [x[0] for x in
                               result]  ## self.tracklist is a list of lists, each entry is a list of indexes into the dataframe, indicating when that track hit a timing point

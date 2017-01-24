@@ -25,12 +25,8 @@ class MapManager():
         #self.center_lon = coords[1]
 
         self.static_map = self.load_map(self.center_lat, self.center_lon)
-        self.load_map(self.center_lat, self.center_lon,direction="s")
-        #self.load_thumbnail(self.center_lat, self.center_lon)
-        #self.static_map.show()
-        #self.static_map.show()
+        self.static_map_sec = self.load_map(self.center_lat, self.center_lon,direction="s")
         self.plotted_points = []
-        #print("init, hiehgt and width is",self.map_height,self.map_width)
 
     def get_centre_of_points(self,points):
         points = list(map(self.latlontopixels, points))
@@ -73,6 +69,9 @@ class MapManager():
 
     def get_map(self):
         return self.static_map
+
+    def get_sec_map(self):
+        return self.static_map_sec
 
     def latlontopixels(self,coords):
         lat, lon = coords

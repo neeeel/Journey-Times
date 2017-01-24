@@ -57,10 +57,6 @@ class Route():
     def setMapManager(self,mapMan):
         self.mapManager=mapMan
 
-    def getMapManager(self):
-        return self.mapManager
-
-
     def update_zoom(self,val):
         self.mapImage = self.mapManager.change_zoom(val)
 
