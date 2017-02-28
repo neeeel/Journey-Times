@@ -577,11 +577,7 @@ class mainWindow(tkinter.Tk):
             wb = xl.Workbooks.Open(Filename=os.path.realpath(filename), ReadOnly=1)
             #xl.Workbooks.Open(Filename=os.path.realpath("C:/Users/NWatson/PycharmProjects/JourneyTimes/blah" + ".xlsm"), ReadOnly=1)
             xl.Application.Run("formatfile")
-            xl.displayalerts = False
-            #xl.ActiveWorkbook.SaveAs(Filename=xlsFile, FileFormat=51)
-            xl.Workbooks(1).Close(SaveChanges=1)
-            xl.Application.Quit()
-            xl = 0
+
         except PermissionError as e:
             messagebox.showinfo(message="cannot save file- " + filename + " workbook is already open, please close and run export again")
         except Exception as e:

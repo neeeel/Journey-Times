@@ -100,7 +100,7 @@ class Route():
 
 
 
-def load_gsd(file):
+def load_gsd(file,index):
     ###
     ### load the GPS data from the GSD file into a pandas dataframe
     ### if theres any sort of error we just abort
@@ -135,7 +135,7 @@ def load_gsd(file):
         print("couldnt dump data")
     return df
 
-def load_csv(file):
+def load_csv(file,index):
     ###
     ### load the GPS data from the CSV file into a pandas dataframe
     ### if theres any sort of error we just abort
@@ -163,6 +163,7 @@ def load_csv(file):
         ###
         df.Lat =df.Lat.apply(ut.latTOdddd)
         df.Lon = df.Lon.apply(ut.lonTOdddd)
+        df["Track"] = "Track " + str(index)
         #df.to_csv("dumped.csv")
     except PermissionError as e:
         print("couldnt dump data")
@@ -173,7 +174,7 @@ def load_csv(file):
         df = None
     return df
 
-def load_gpx(file):
+def load_gpx(file,index):
     global df
     if ".gpx" not in file:
         df = None
@@ -205,6 +206,7 @@ def load_gpx(file):
         l = ["Time", "Record", "Lat", "Lon"]
         df.columns = l
         df["Time"] = pd.to_datetime(df["Time"],dayfirst=True)
+        df["Track"] = "Track " + str(index)
         df.replace(np.inf, np.nan,inplace=True) ## because for some reason, last row speed is calculated as inf
         df = df.dropna()
     except Exception as e:
@@ -613,16 +615,16 @@ def processRoutes(route,fileList):
     pointsInRoute = int(d1/d2) ##rough estimate of how many points will be travelled in 1 route
     print("points in route is",pointsInRoute)
     dataframes=[]
-    for file in fileList:
+    for index,file in enumerate(fileList):
         if ".csv" in file:
             print("loading csv")
-            temp = load_csv(file)
+            temp = load_csv(file,index)
         if ".gpx" in file:
             print("loading gpx")
-            temp = load_gpx(file)
+            temp = load_gpx(file,index)
         if ".gsd" in file:
             print("loading gsd")
-            temp = load_gsd(file)
+            temp = load_gsd(file,index)
         dataframes.append(temp)
     df = pd.concat(dataframes)
     if df is None:
@@ -631,7 +633,7 @@ def processRoutes(route,fileList):
         messagebox.showinfo("error", "Invalid data file,must be .csv or .gpx, or please check format of data")
         return
     print(df.head())
-    df.sort_values(by=["Time"], inplace=True)
+    df.sort_values(by=["Track","Time"], inplace=True)
     df = df.reset_index(drop=True)
     del df["Record"]
     df.index.name = "Record"
