@@ -64,7 +64,8 @@ class Route():
         return self.mapManager
 
     def add_timing_point(self,lat,long,dir,ID):
-        self.timingPoints.append((ID,dir,float(lat),float(long)))
+        print("adding timing point to route",self.name,"id is",ID,"type of id is ",type(ID))
+        self.timingPoints.append((int(ID),dir,float(lat),float(long)))
         self.timingPoints = sorted(self.timingPoints, key=operator.itemgetter(1, 0))
         if not dir in self.dir:
             self.dir.append(dir)
@@ -90,6 +91,7 @@ class Route():
         if len(self.dir) == 1:
             reverse = list(reversed(TPs[0]))
             TPs.append(reverse)
+        print("returning sorted timing points",TPs)
         return TPs
 
     def display(self):
@@ -596,6 +598,127 @@ def process_direction(timingPoints,pointsInRoute,coords):
         distList = [round(sum(i) / len(distList), 3) for i in zip(*distList)]
     return [finalList,distList,discardedList]
 
+def process_direction_alternative(timingPoints,pointsInRoute,coords):
+    ### this function "cuts" up the dataframe into individual tracks for a specific direction
+    ### pointsInRoute specifies a rough estimate of how many Data points are in the average run
+    ### this is used to group a bunch of selected points into groups that are roughly close to each otehr
+    ###
+
+    finalTrackList = []
+
+    print("number of legs greater than 1 minute is", len(df[df["legTime"] > 60]),
+          df[df["legTime"] > 60].index.values.tolist())
+    segments = df[df["legTime"] > 300].index.values.tolist()
+
+    segments.append(len(df) - 1)
+    segments.insert(0, 0)
+
+    print("segments are", segments)
+    finalList = []
+    for i, value in enumerate(segments[:-1]):
+        print("processing segment", segments[i] + 1, segments[i + 1])
+        startList = []
+        trackList = []
+
+
+        ###
+        ### get the rough estimates of starting points for tracks.
+        ###
+
+        startList = (getStartPoints(segments[i] + 1, segments[i + 1], timingPoints[0], timingPoints[1], pointsInRoute))
+        if startList == []:
+            continue  ## check the next segment
+        print("start list is",startList)
+        ### for each start point, follow the track down the road, until we are close to the next timing point
+        for pointIndex,point in enumerate(startList):
+            print("checking start point",pointIndex)
+            journey = [point]
+            tpIndex = 1
+            while point < segments[i + 1]:
+                pointData = df.iloc[point]
+                tp = timingPoints[tpIndex]
+                dist = ut.getDistInMiles(tp,(pointData["Lat"],pointData["Lon"]))
+                #print("point is",point,"dist is",dist,"tp no is",tpIndex,tp)
+                if dist <= 0.05:
+                    #print("found a point fairly close to TP",tpIndex)
+                    tempList = [(point + i,ut.getDistInMiles(tp, (df.iloc[point + i]["Lat"], df.iloc[point + i]["Lon"])))for i in range(1, 5)]
+                    point = min(tempList, key=lambda t: t[1])[0]
+                    journey.append(point)
+                    #print("journey is",journey)
+                    tpIndex += 1
+                    if tpIndex >= len(timingPoints):
+                        break
+                    else:
+                        tp = timingPoints[tpIndex]
+                point+=1
+            if len(journey) == len(timingPoints):
+                ### check that the selected points are in increasing order
+                if sorted(journey)==journey:
+                    p = get_final_start_point(journey[0], journey[1], timingPoints[0], timingPoints[1])
+                    if not p is None:  ## we need the start point to compare to for the previous runs end point
+                        del journey[0]
+                        journey.insert(0, p)
+                    finalList.append(journey)
+
+
+    trackList = finalList
+    finalList = []
+    distList = []
+    discardedList  = []
+    for track in trackList:
+        ###
+        #### get the average speeds
+        ###
+        result = get_speed(track)
+        speeds = result[0]
+        l = []
+        times = [df.iloc[s]["Time"].strftime('%H:%M:%S') for s in
+                 track]  # if track[-1] - track[0] < 6 * pointsInRoute])  # if the route is shorter than X times pointsInRoute, we keep it, otherwise, we discard it, because its probably a fake route
+
+        l.append(track)
+        l.append(times)
+
+        l.append(speeds)
+        print("final run details", l)
+        finalList.append(l)
+        ###
+        ### get the total distances between TPS and total distance overall
+        ###
+
+        # if result[1] != [0]:
+        distList.append(result[1])
+
+    #print("alternative track list at end is", finalList)
+    finalList = sorted(finalList, key=lambda x: x[1][0])
+   # print("after sorting, track list at end is", finalList)
+    # print("after calculation, distList is",distList)
+    #
+
+
+    #print("distlist is", distList)
+    if len(distList) != 0:
+        distList = [round(sum(i) / len(distList), 3) for i in zip(*distList)]
+    return [finalList, distList, discardedList]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def processRoutes(route,fileList):
     ###
     ### we are passed route info ( as a route object) , and want to get the gps data and cut it up, for both directions of
@@ -672,9 +795,19 @@ def processRoutes(route,fileList):
     lons = df["Lon"].tolist()
     coords = list(zip(lats, lons))
     result = []
-    result.append(process_direction(timingPoints,pointsInRoute,coords))
+
+    print("-------------------------primary direction----------------------------------------")
+    #result.append(process_direction(timingPoints, pointsInRoute, coords))
+    result.append(process_direction_alternative(timingPoints, pointsInRoute, coords))
     timingPoints = [(x[2], x[3]) for x in route.get_timing_points()[1]]
-    result.append(process_direction(timingPoints, pointsInRoute, coords))
+
+    print("-------------------------secondary direction----------------------------------------")
+    print("timing points for secondary direction are",timingPoints)
+    #result.append(process_direction(timingPoints, pointsInRoute, coords))
+    result.append(process_direction_alternative(timingPoints, pointsInRoute, coords))
+    ### alternative method
+
+
 
     try:
         df["OS Grid Reference"] = ""
@@ -744,7 +877,7 @@ def getStartPoints(dataStart,dataEnd,tpStart,tpEnd,pointsInRoute):
     cutOffIndex = 0
 
     while index < len(points):
-        print("remaining points are",points[index:])
+        #print("remaining points are",points[index:])
         #print("current index is",index,"lower bound is ",points[index],"upper bound calculated as ",points[index] + (pointsInRoute ))
         temp = []
         for p in points[index:]:
@@ -758,7 +891,7 @@ def getStartPoints(dataStart,dataEnd,tpStart,tpEnd,pointsInRoute):
                 else:
                     break
         #temp2 = [i for i in points[index:] if i < points[index] + (pointsInRoute )] # points in route is the guessed number of GPS points between the start and end points. Here we are trying to gather all the "similar" numbers together to be able to determine the start point
-        print("temp is", temp)
+        #print("temp is", temp)
         if temp != []:
             length = len(temp)
             ###
@@ -768,32 +901,33 @@ def getStartPoints(dataStart,dataEnd,tpStart,tpEnd,pointsInRoute):
                 longestLeg=0
             else:
                 longestLeg = np.array(df[["legTime"]][temp[0]:temp[-1]].idxmax())[0]
-            print("longest leg is",longestLeg)
+            #print("longest leg is",longestLeg)
             if df["legTime"].iloc[longestLeg] > 30:
                 cutOffIndex = longestLeg
-            print("cutoff index is",cutOffIndex,temp)
+            #print("cutoff index is",cutOffIndex,temp)
             while temp[0] <= cutOffIndex:
                 del temp[0]
-            print("after dealing with cutoff index, temp is ", temp)
+            #print("after dealing with cutoff index, temp is ", temp)
 
             ## sort the selected timing points with regard to closeness to start point, closest is first
 
             temp = (sorted([(i, df.iloc[i]["Time"].strftime('%H:%M:%S'),ut.getDist((df.iloc[i]["Lat"], df.iloc[i]["Lon"]), tpStart)) for i in temp],key=lambda x: x[2]))
-            print("sorted temp is",temp)
+            #print("sorted temp is",temp)
 
             ###
             ### check how close the closest point is. If its further away than 0.009 ( a pretty arbitrary pick at the moment)
             ### then we reject it as being too far away from the start point to count as a run start
             ###
             if temp[0][2] <= 0.0009:
-                print("seleceted", temp[0][0])
+                #print("seleceted", temp[0][0])
                 startPoints.append((temp[0][0]))
             else:
-                print("discarded start point",temp[0])
+                pass
+                #print("discarded start point",temp[0])
             index += length
         else:
             index+=1
-    print("no of start points determined",len(startPoints))
+    #print("no of start points determined",len(startPoints))
     return startPoints
 
 def get_final_start_point(startIndex,endIndex,tpStart,tp):
@@ -807,7 +941,7 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
 
 
     global df
-    print("final start point checking", startIndex, endIndex)
+    #print("final start point checking", startIndex, endIndex)
     if startIndex == -1 or endIndex == -1:
         return None
     #print("measuring from tp",tp)
@@ -838,8 +972,8 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
             maxIndex = i
 
 
-    print("point with max dist from tp is ",startIndex + maxIndex)
-    print("length of reduced coords is", len(coords[maxIndex:]))
+    #print("point with max dist from tp is ",startIndex + maxIndex)
+    #print("length of reduced coords is", len(coords[maxIndex:]))
 
     if len(coords[maxIndex:]) <=1:
         return None
@@ -853,13 +987,13 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
 
     tree = spatial.KDTree(coords[maxIndex:])
     result = tree.query(np.array(tpStart), 1)
-    print("result is",result)
-    print("final start point result is ", result[1] + startIndex + maxIndex,"adjusted from",startIndex)
+    #print("result is",result)
+    #print("final start point result is ", result[1] + startIndex + maxIndex,"adjusted from",startIndex)
     selectedPoint = result[1] + startIndex + maxIndex
     if endIndex-selectedPoint<=1:
         return None
     longestLeg = np.array(df[["legTime"]][selectedPoint:endIndex].idxmax())[0]
-    print("longest leg is", longestLeg)
+    #print("longest leg is", longestLeg)
     if df["legTime"].iloc[longestLeg] > 20:
         print("in final start point we found a big gap between start and end point")
         print(df.iloc[longestLeg])
@@ -896,14 +1030,11 @@ def get_closest_point_to_intermediate_point(startIndex,endIndex,tp):
     closestPointIndex = result[1][0]
     earliestIndex = min(result[1])
     print("closest point is",closestPointIndex,"earliest is",earliestIndex)
-    if earliestIndex < closestPointIndex - 10:
-        return earliestIndex + startIndex-1
-    else:
-        return closestPointIndex + startIndex
+    return closestPointIndex + startIndex
 
 def get_temp_end_point(startIndex,endIndex,tpEnd,pointsInRoute):
     global df,avLegTime
-    print("temp end point checking",startIndex,endIndex)
+    print("temp end point checking",startIndex,endIndex,tpEnd)
 
     if endIndex == startIndex:
         return None

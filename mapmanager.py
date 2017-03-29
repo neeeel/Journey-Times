@@ -21,7 +21,7 @@ class MapManager():
         self.zoom = self.calculateZoomValue(tps)
         self.tps = tps
         self.center_lat,self.center_lon = self.get_centre_of_points(tps)
-        print(self.center_lat,self.center_lon)
+        #print(self.center_lat,self.center_lon)
         #self.center_lon = coords[1]
 
         self.static_map = self.load_map(self.center_lat, self.center_lon)
@@ -56,7 +56,7 @@ class MapManager():
         #print("calculated zoom as ",20 -bisect.bisect_right(self.zoomValues,maxVal),bisect.bisect_right(self.zoomValues,maxVal))
         for i,z in enumerate(self.zoomValues):
             diff = maxVal-z
-            print("diff ", diff, z,20-i,diff/z,z/diff)
+            #print("diff ", diff, z,20-i,diff/z,z/diff)
             if diff < 0:
                 if abs(diff/z) < 0.15:
                     #print("adding 1 to zoom")

@@ -169,7 +169,6 @@ class mainWindow(tkinter.Tk):
         print("canvas size is",canvas.winfo_width(),canvas.winfo_height(),canvas.winfo_reqwidth(),canvas.winfo_reqheight())
         print("frame size is", innerFrame.winfo_width(), innerFrame.winfo_height(), innerFrame.winfo_reqwidth(),innerFrame.winfo_reqheight())
 
-
     def scroll_data_window(self,event):
         print("event",event,event.widget.get())
         left, right = (event.widget.get())
@@ -516,7 +515,7 @@ class mainWindow(tkinter.Tk):
 
         if self.getTrack != None:
             self.mapMan = mapmanager.MapManager(640, 640, 12, timingPoints[0], timingPoints)
-            self.trackData = self.getTrack(trackList[1])
+            self.trackData = self.getTrack(trackList[0])
         offset=trackList[0][0]
         for i,t in enumerate(trackList[0][:-1]):
             self.progress.step()
@@ -529,7 +528,7 @@ class mainWindow(tkinter.Tk):
         lats = self.trackData["Lat"].tolist()
         lons = self.trackData["Lon"].tolist()
         pathData = list(zip(lats, lons))
-        #print("Track data is ",pathData)
+        print("Track data is ",pathData)
         image = self.mapMan.get_map_with_path(timingPoints,pathData)
         excelImage = openpyxl.drawing.image.Image(image)
         sheet = wb.get_sheet_by_name('Location - Distance')
@@ -537,7 +536,7 @@ class mainWindow(tkinter.Tk):
 
 
 
-
+        print("here")
         if self.check3.get() == 1:
             ###
             ### dump raw data to the excel sheet
@@ -565,18 +564,25 @@ class mainWindow(tkinter.Tk):
             except Exception as e:
                 print("PHOOO")
                 pass  ### we tried to remove the raw data sheet, but it already didnt exist
-
+        wb.active = 0
         try:
+            print("saving openpyxl workbook",filename +".xlsm")
             wb.save(filename +".xlsm")
+            print("opening win32com file")
             xl = win32com.client.Dispatch("Excel.Application")
             xl.Application.Visible = True
             xlsFile = os.path.realpath(filename + ".xlsx")
+            print("xslsfile is",xlsFile)
             filename = filename+".xlsm"
             print("trying to open workbook",os.path.realpath(filename),xlsFile)
             time.sleep(0.5)
             wb = xl.Workbooks.Open(Filename=os.path.realpath(filename), ReadOnly=1)
             #xl.Workbooks.Open(Filename=os.path.realpath("C:/Users/NWatson/PycharmProjects/JourneyTimes/blah" + ".xlsm"), ReadOnly=1)
             xl.Application.Run("formatfile")
+            wb.Save()
+            wb.Close(SaveChanges=True)
+            xl.Quit()
+
 
         except PermissionError as e:
             messagebox.showinfo(message="cannot save file- " + filename + " workbook is already open, please close and run export again")
