@@ -220,6 +220,49 @@ def load_gpx(file,index):
 
     return df
 
+def load_kml(file,index):
+    result = []
+    routes = {}
+    dir = "C:\\user\\nwatson\\desktop\\"
+    # file = filedialog.askopenfilename(initialdir=dir)
+    if file == "":
+        return
+    if file[-4:] == ".kml":
+        tree = etree.parse(file)
+        root = tree.getroot()
+        # "root",root.tag)
+        # for child in root:
+        # print(child.tag,child.attrib)
+        doc = root.find("{http://www.opengis.net/kml/2.2}Document")
+        if doc is None:
+            return
+        if doc.find("{http://www.opengis.net/kml/2.2}Folder") is None:
+            # print("assigning doc")
+            iter = root.iter("{http://www.opengis.net/kml/2.2}Document")
+        else:
+            # print("assigning folder")
+            iter = doc.iter("{http://www.opengis.net/kml/2.2}Folder")
+        t = []
+        for item in iter:
+            tps = []
+
+            for track in item.iter("{http://www.google.com/kml/ext/2.2}Track"):
+                times = [when.text for when in track.iter("{http://www.opengis.net/kml/2.2}when")]
+                points = [gx.text.split(" ") for gx in track.iter("{http://www.google.com/kml/ext/2.2}coord")]
+                t = list(zip(times, points))
+                print(t)
+        for i, point in enumerate(t):
+            result.append((point[0], i, point[1][1], point[1][0]))
+    df = pd.DataFrame(result, columns=["Time", "Record", "Lat", "Lon"])
+    df["Track"] = "Track " + str(index)
+    df["Time"] = pd.to_datetime(df["Time"])
+    df[["Lat","Lon"]] = df[["Lat","Lon"]].astype(float)
+    df.replace(np.inf, np.nan, inplace=True)  ## because for some reason, last row speed is calculated as inf
+    df = df.dropna()
+    print(df.head())
+    return df
+
+
 def get_date(index):
     ###
     ### returns the date of a given index in the pandas dataframe
@@ -604,7 +647,6 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
     ### this is used to group a bunch of selected points into groups that are roughly close to each otehr
     ###
 
-    finalTrackList = []
 
     print("number of legs greater than 1 minute is", len(df[df["legTime"] > 60]),
           df[df["legTime"] > 60].index.values.tolist())
@@ -617,7 +659,6 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
     finalList = []
     for i, value in enumerate(segments[:-1]):
         print("processing segment", segments[i] + 1, segments[i + 1])
-        startList = []
         trackList = []
 
 
@@ -631,25 +672,29 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
         print("start list is",startList)
         ### for each start point, follow the track down the road, until we are close to the next timing point
         for pointIndex,point in enumerate(startList):
-            print("checking start point",pointIndex)
+            #print("checking start point",pointIndex)
             journey = [point]
             tpIndex = 1
+            closestPoint = [point,1000]
             while point < segments[i + 1]:
                 pointData = df.iloc[point]
                 tp = timingPoints[tpIndex]
                 dist = ut.getDistInMiles(tp,(pointData["Lat"],pointData["Lon"]))
+                if dist < closestPoint[1]:
+                    closestPoint[0] = point
+                    closestPoint[1] = dist
                 #print("point is",point,"dist is",dist,"tp no is",tpIndex,tp)
-                if dist <= 0.05:
-                    #print("found a point fairly close to TP",tpIndex)
+                if dist <= 0.04:
                     tempList = [(point + i,ut.getDistInMiles(tp, (df.iloc[point + i]["Lat"], df.iloc[point + i]["Lon"])))for i in range(1, 5)]
                     point = min(tempList, key=lambda t: t[1])[0]
                     journey.append(point)
-                    #print("journey is",journey)
+                    print("journey is",journey)
                     tpIndex += 1
+                    if tpIndex == 8:
+                        print("WERWER")
+                    closestPoint = [point, 1000]
                     if tpIndex >= len(timingPoints):
                         break
-                    else:
-                        tp = timingPoints[tpIndex]
                 point+=1
             if len(journey) == len(timingPoints):
                 ### check that the selected points are in increasing order
@@ -659,9 +704,35 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
                         del journey[0]
                         journey.insert(0, p)
                     finalList.append(journey)
+            else:
+                print("Journey failed after ",len(journey),"timing points",tp,closestPoint)
+    print("final list is",finalList)
+    if len(finalList) > 1:
+        for index,journey in enumerate(finalList[:-1]):
+            print("journey is",journey)
+            print("following journey is",finalList[index+1])
+            if journey[1] < finalList[index+1][1]:
+                ### we are checking to see if two journeys have the same end time
+                ### if they do, we want to remove the one that has the earliest start time
+                ### because its likely that this point is the end of a previous journey, ie going the wrong way
+                trackList.append(journey)
+            elif journey[1] == finalList[index+1][1]:
+                ### do nothing, we dont want to add the earliest journey
+                pass
+        ##
+        ### deal with the final journey in finalList
+        ###
+        if trackList != []:
+            if finalList[-1][1] > trackList[-1][1]:
+                trackList.append(finalList[-1])
+    else:
+        ### only 1 run, so copy it into tracklist
+        trackList = finalList
 
 
-    trackList = finalList
+    print("after filtering for equal end times of journeys, tracklist is",trackList)
+
+    #trackList = finalList
     finalList = []
     distList = []
     discardedList  = []
@@ -672,8 +743,8 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
         result = get_speed(track)
         speeds = result[0]
         l = []
-        times = [df.iloc[s]["Time"].strftime('%H:%M:%S') for s in
-                 track]  # if track[-1] - track[0] < 6 * pointsInRoute])  # if the route is shorter than X times pointsInRoute, we keep it, otherwise, we discard it, because its probably a fake route
+        times = [df.iloc[s]["Time"].strftime('%H:%M:%S') for s in track]
+
 
         l.append(track)
         l.append(times)
@@ -681,6 +752,7 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
         l.append(speeds)
         print("final run details", l)
         finalList.append(l)
+
         ###
         ### get the total distances between TPS and total distance overall
         ###
@@ -688,14 +760,7 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
         # if result[1] != [0]:
         distList.append(result[1])
 
-    #print("alternative track list at end is", finalList)
     finalList = sorted(finalList, key=lambda x: x[1][0])
-   # print("after sorting, track list at end is", finalList)
-    # print("after calculation, distList is",distList)
-    #
-
-
-    #print("distlist is", distList)
     if len(distList) != 0:
         distList = [round(sum(i) / len(distList), 3) for i in zip(*distList)]
     return [finalList, distList, discardedList]
@@ -748,6 +813,9 @@ def processRoutes(route,fileList):
         if ".gsd" in file:
             print("loading gsd")
             temp = load_gsd(file,index)
+        if ".kml" in file:
+            print("loading kml")
+            temp = load_kml(file,index)
         dataframes.append(temp)
     df = pd.concat(dataframes)
     if df is None:
@@ -755,7 +823,6 @@ def processRoutes(route,fileList):
         window.display_data(None)
         messagebox.showinfo("error", "Invalid data file,must be .csv or .gpx, or please check format of data")
         return
-    print(df.head())
     df.sort_values(by=["Track","Time"], inplace=True)
     df = df.reset_index(drop=True)
     del df["Record"]
@@ -777,20 +844,6 @@ def processRoutes(route,fileList):
         2) if row["legTime"] != 0 else 0, axis=1)
 
 
-
-
-
-
-
-    #print("length of df is",len(df))
-    #avSpeed = df["legSpeed"].mean()
-    #avLegTime = df["legTime"].median()
-    #print("average speed is",avSpeed,"av leg time is",avLegTime)
-    #print("rough no of points is",pointsInRoute)
-    #if avSpeed!=0:
-        #print("new calculation of points in route is ",int(d1/(d2*avLegTime*(avSpeed/40))))
-        #pointsInRoute = int(d1/(d2*avLegTime*(avSpeed/40))) #### because we need a fairly accurate estimation of points in route,
-                                                 ### so we get average speed, and mutliply avspeed/40 to scale the distance per leg
     lats = df["Lat"].tolist()
     lons = df["Lon"].tolist()
     coords = list(zip(lats, lons))
