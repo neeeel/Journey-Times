@@ -816,7 +816,8 @@ class mainWindow(tkinter.Tk):
             drawimage = ImageDraw.Draw(image)
             trackData = self.getTrack(track)
             trackData[:-1].apply(lambda row: self.draw_leg_on_image((row["Lat"], row["Lon"]), (row["latNext"], row["lonNext"]), row["legSpeed"],drawimage),axis=1)
-            t = datetime.datetime.strftime(trackData.iloc[0]["Time"],"%H:%M:%S")
+            if self.check4.get() == 1:
+                t = datetime.datetime.strftime(trackData.iloc[0]["Time"] +datetime.timedelta(hours=1),"%H:%M:%S")
             drawimage.rectangle([0, 0, 100, 50], fill="white")
             drawimage.text((10, 10), text=t, font=fnt, fill="black")
             folder = os.path.dirname(os.path.abspath(__file__))

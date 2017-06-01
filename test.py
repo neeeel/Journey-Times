@@ -159,6 +159,7 @@ def load_csv(file,index):
             df = df.drop(["Unnamed: 7"], axis=1)
         l = ["Time","Record", "Lat", "Lon"]
         df.columns = l
+        df["Time"] = df["Time"].apply(lambda x: x.replace(microsecond=0))
         #df["Time"] = df["Time"] + pd.DateOffset(hours=1)
         ###
         ### convert the gps data into WSG 84
@@ -208,6 +209,7 @@ def load_gpx(file,index):
         l = ["Time", "Record", "Lat", "Lon"]
         df.columns = l
         df["Time"] = pd.to_datetime(df["Time"],dayfirst=True)
+        df["Time"] = df["Time"].apply(lambda x:x.replace(microsecond=0))
         df["Track"] = "Track " + str(index)
         df.replace(np.inf, np.nan,inplace=True) ## because for some reason, last row speed is calculated as inf
         df = df.dropna()
@@ -256,6 +258,7 @@ def load_kml(file,index):
     df = pd.DataFrame(result, columns=["Time", "Record", "Lat", "Lon"])
     df["Track"] = "Track " + str(index)
     df["Time"] = pd.to_datetime(df["Time"])
+    df["Time"] = df["Time"].apply(lambda x: x.replace(microsecond=0))
     df[["Lat","Lon"]] = df[["Lat","Lon"]].astype(float)
     df.replace(np.inf, np.nan, inplace=True)  ## because for some reason, last row speed is calculated as inf
     df = df.dropna()
@@ -651,21 +654,16 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
     print("number of legs greater than 1 minute is", len(df[df["legTime"] > 60]),
           df[df["legTime"] > 60].index.values.tolist())
     segments = df[df["legTime"] > 300].index.values.tolist()
-
     segments.append(len(df) - 1)
     segments.insert(0, 0)
-
     print("segments are", segments)
     finalList = []
     for i, value in enumerate(segments[:-1]):
         print("processing segment", segments[i] + 1, segments[i + 1])
         trackList = []
-
-
         ###
         ### get the rough estimates of starting points for tracks.
         ###
-
         startList = (getStartPoints(segments[i] + 1, segments[i + 1], timingPoints[0], timingPoints[1], pointsInRoute))
         if startList == []:
             continue  ## check the next segment
@@ -684,7 +682,7 @@ def process_direction_alternative(timingPoints,pointsInRoute,coords):
                     closestPoint[0] = point
                     closestPoint[1] = dist
                 #print("point is",point,"dist is",dist,"tp no is",tpIndex,tp)
-                if dist <= 0.04:
+                if dist <= 0.015:
                     tempList = [(point + i,ut.getDistInMiles(tp, (df.iloc[point + i]["Lat"], df.iloc[point + i]["Lon"])))for i in range(1, 5)]
                     point = min(tempList, key=lambda t: t[1])[0]
                     journey.append(point)
@@ -838,6 +836,7 @@ def processRoutes(route,fileList):
     df["legTime"] = df.apply(lambda row: abs((row["timeNext"] - row["Time"]) / np.timedelta64(1, 's')),
                              axis=1)  # / np.timedelta64(1, 's') if I want an int rather than a timedelta , .split("days")[1].strip() if I want a string
     df["legDist"] = df.apply(get_leg_distance, axis=1)
+    #print(df.loc[1544])
     # print("converting leg speeds")
     df["legSpeed"] = df.apply(lambda row: round(
         row["legDist"] * 3600 / int(row["legTime"]) / abs((row["timeNext"] - row["Time"]) / np.timedelta64(1, 's')),
@@ -994,7 +993,7 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
 
 
     global df
-    #print("final start point checking", startIndex, endIndex)
+    print("final start point checking", startIndex, endIndex)
     if startIndex == -1 or endIndex == -1:
         return None
     #print("measuring from tp",tp)
@@ -1012,45 +1011,34 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
     #print("length of coords is",len(coords))
     maxDist = 0
     maxIndex = 0
+    latestClosePoint = 0
     if len(coords)<=1:
         return None
-    ###
-    ### step through all the coords in the selected data set, and find the point furthest from timingpoint tp
-    ###
+
     for i,c in enumerate(coords):
-        dist = ut.getDistInMiles(c,tp)
-        #print("index",i,"dist",dist,c)
-        if dist > maxDist:
-            maxDist = dist
-            maxIndex = i
-
-
-    #print("point with max dist from tp is ",startIndex + maxIndex)
-    #print("length of reduced coords is", len(coords[maxIndex:]))
-
-    if len(coords[maxIndex:]) <=1:
-        return None
-
-    ### restrict the data set to be between maxIndex and the end, because we know that the correct starting point cant
-    ### be further back ( in time) than the point that is furthest from tp, and then search the restricted data set
-    ### for the point nearest to tpStart
-    ### maybe a big assumption, because the track could bend in a wierd way which would allow the closest point to be
-    ### before the furthest point away
+        ###
+        ### find the latest point between the start point and the next timing point, that goes close to the start point
+        ###
+        dist = ut.getDistInMiles(c, tpStart)
+        if dist < 0.01:
+            latestClosePoint = i
+    print("point with max dist from tp is ",startIndex + maxIndex)
+    print("latest close point is",latestClosePoint + startIndex)
     ###
+    ### move back a bit, we want to check the nearby points to see if one is closer than the currently selected one
+    ###
+    latestClosePoint-=3
+    if latestClosePoint <0:
+        latestClosePoint = 0
 
-    tree = spatial.KDTree(coords[maxIndex:])
-    result = tree.query(np.array(tpStart), 1)
-    #print("result is",result)
-    #print("final start point result is ", result[1] + startIndex + maxIndex,"adjusted from",startIndex)
-    selectedPoint = result[1] + startIndex + maxIndex
-    if endIndex-selectedPoint<=1:
-        return None
-    longestLeg = np.array(df[["legTime"]][selectedPoint:endIndex].idxmax())[0]
-    #print("longest leg is", longestLeg)
-    if df["legTime"].iloc[longestLeg] > 20:
-        print("in final start point we found a big gap between start and end point")
-        print(df.iloc[longestLeg])
-    return result[1] + startIndex + maxIndex
+    ###
+    ### get the distances from tpStart of the next 6 points, and select the nearest one
+    ###
+    data=[[i + latestClosePoint,ut.getDistInMiles(c,tpStart)] for i,c in enumerate(coords[latestClosePoint:latestClosePoint+6])]
+    print("data is",data)
+    closestPoint = min(data,key=operator.itemgetter(1))
+    return(closestPoint[0] + startIndex)
+
 
 def get_closest_point_to_intermediate_point(startIndex,endIndex,tp):
     ###
