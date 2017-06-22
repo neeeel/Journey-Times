@@ -14,6 +14,8 @@ import queue
 import copy
 import time
 import os
+import dragandzoomcanvas
+import mapmanager2
 
 
 
@@ -38,12 +40,14 @@ class mainWindow(tkinter.Tk):
         self.loadRoutesFunction = None
         self.getDateFunction = None
         self.getSpeedFunction = None
+        self.getfullDataframeFunction = None
         self.previousLegIndex = -1 # this keeps track of the leg that is displayed yellow, so we dont have to redraw the whole track each time
         self.primaryTrackList = []
         self.secondaryTrackList = []
         self.trackWindow = None
         self.mapMan = None
         self.mapImage = None
+        self.addTimingPointFlag = False
         self.wm_title("JoPro - Journey Time Software")
         self.state("zoomed")
         self.primaryTrees = []
@@ -58,6 +62,8 @@ class mainWindow(tkinter.Tk):
         menu.add_command(label = "Load TPs",command = self.displayRoutes)
         menu.add_separator()
         menu.add_command(label="Export",command=self.spawn_excel_window)
+        menu.add_separator()
+        menu.add_command(label="View Full Track", command=self.view_full_track)
         self.menubar.add_cascade(label="File",menu = menu)
         self.config(menu=self.menubar)
         menu = tkinter.Menu(self.menubar,tearoff = 0)
@@ -74,7 +80,6 @@ class mainWindow(tkinter.Tk):
         topFrame = tkinter.Frame(self,width = 1020,height = 1000, bg="white")
         subFrame = tkinter.Frame(topFrame, width=100, height=900, bg="white")
         self.routeListBox = tkinter.Listbox(master = subFrame,height = 10,width=17,relief=tkinter.SUNKEN,borderwidth =5,bg="white")
-        #self.TPListBox = tkinter.Listbox(master=topFrame, height=15, relief=tkinter.SUNKEN, borderwidth=5,bg="white")
         buttonFrame = tkinter.Frame(subFrame,height = 100,bg="white")
 
         tkinter.Button(buttonFrame,text="+",font = labelFont,bg="white",width=2,command=lambda :self.change_zoom(1)).grid(row = 0,column = 0,sticky="ne",pady = (250,5))
@@ -168,6 +173,122 @@ class mainWindow(tkinter.Tk):
         self.update()
         print("canvas size is",canvas.winfo_width(),canvas.winfo_height(),canvas.winfo_reqwidth(),canvas.winfo_reqheight())
         print("frame size is", innerFrame.winfo_width(), innerFrame.winfo_height(), innerFrame.winfo_reqwidth(),innerFrame.winfo_reqheight())
+
+
+    def view_full_track(self):
+
+        df = self.getFullTracksFunction()
+        if df is None:
+            return
+        coords = df[["Lat","Lon"]].values.tolist()
+        self.centrePoint = coords[0]
+        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        route = self.routes[routeName]
+        tps = self.routes[routeName].get_timing_points()
+        coords = [mapmanager2.get_coords(self.centrePoint, p, 10,size=800) for p in coords]
+        win = tkinter.Toplevel()
+        self.dragandzoomcanvas = dragandzoomcanvas.DragAndZoomCanvas(win, 1500, 1000)
+        self.dragandzoomcanvas.pack(side=tkinter.LEFT)
+        self.dragandzoomcanvas.set_coords(coords)
+        self.dragandzoomcanvas.set_centre_point(self.centrePoint)
+        self.dragandzoomcanvas.set_route(route)
+        self.dragandzoomcanvas.set_callback_function("notify change of point",self.receive_notification_of_point_click)
+        frame = tkinter.Frame(win, bg="white")
+        self.trackTabs = ttk.Notebook(frame)
+        self.timingPointsFrame = tkinter.Frame(frame,bg="white")
+        self.trackTabs.add(self.timingPointsFrame,text = "Timing Points")
+        self.trackFrame = tkinter.Frame(frame, bg="white",width = 300)
+        self.trackTabs.add(self.trackFrame, text="Full Track")
+        self.completedRunsFrame = tkinter.Frame(frame, bg="white")
+        self.trackTabs.add(self.completedRunsFrame, text="Completed Runs")
+        self.trackTabs.grid(row=0,column=0,sticky = "nsew")
+        frame.pack(expand=tkinter.YES,fill=tkinter.BOTH,side=tkinter.LEFT)
+
+        ###
+        ### set up the full track treeview
+        ###
+        scroll = tkinter.Scrollbar(self.trackFrame)
+        tree = ttk.Treeview(self.trackFrame,columns=[0,1,2,3,4], show="headings", height=45,yscrollcommand=scroll.set)
+        for index,heading in enumerate([("Index",40),("Track",60),("Lat",80),("Lon",80),("Time",120)]):
+            tree.column(index,width = heading[1])
+            tree.heading(index,text = heading[0])
+        tree.grid(row=0,column=0)
+        scroll.config(command=tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        values = df[["Record","Track","Lat","Lon","Time"]].values.tolist()
+        for index,val in enumerate(values):
+            tree.insert("", "end", iid=index, values=val)
+        tree.bind("<<TreeviewSelect>>", self.view_gps_point)
+        if len(tps[0]) < 50:
+            height = len(tps[0])
+        else:
+            height = 50
+
+        tree = ttk.Treeview(self.timingPointsFrame, columns=[0, 1, 2], height=height,show="headings")
+        for index, heading in enumerate([("Index",45), ("Lat",85), ("Lon",85)]):
+            tree.column(index, width=heading[1])
+            tree.heading(index, text=heading[0])
+        tree.grid(row=0, column=0)
+        tree.bind("<Button-1>", self.view_timing_point)
+        for tp in tps[0]:
+            tree.insert("", "end", iid=tp[0], values=[tp[0],tp[2],tp[3]])
+        self.direction = tkinter.IntVar()
+        self.direction.set(0)
+        tkinter.Radiobutton(self.timingPointsFrame,text = "Primary",variable=self.direction,value = 0, command=self.direction_changed,bg="white").grid(row=1,column=0)
+        tkinter.Radiobutton(self.timingPointsFrame, text="Secondary", variable=self.direction,value =1, command=self.direction_changed,bg="white").grid(row=2, column=0)
+        tkinter.Button(self.timingPointsFrame,text="Add",command=self.add_timing_point).grid(row=3,column=0)
+        tkinter.Button(self.timingPointsFrame, text="Save", command=self.save_timing_points).grid(row=4, column=0)
+        self.dragandzoomcanvas.redraw_canvas()
+
+
+        ###
+        ### Track tree
+        ###
+
+    def direction_changed(self):
+        print("direction is",self.direction.get())
+        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        tps = self.routes[routeName].get_timing_points()
+        tree = self.timingPointsFrame.winfo_children()[0]
+        tree.delete(*tree.get_children())
+        tree.configure(height=len(tps[self.direction.get()]))
+        for tp in tps[self.direction.get()]:
+            tree.insert("", "end", iid=tp[0], values=[tp[0],tp[2],tp[3]])
+        self.dragandzoomcanvas.set_timing_points_to_display(self.direction.get())
+
+    def view_timing_point(self,event):
+        curItem = event.widget.identify_row(event.y)
+        print(curItem)
+        print(event.widget.selection())
+        if curItem != "":
+            self.dragandzoomcanvas.view_timing_point(int(curItem)-1)
+
+    def add_timing_point(self):
+        if self.addTimingPointFlag == False:
+            self.addTimingPointFlag = True
+            print("colour of button is",self.timingPointsFrame.winfo_children()[3].cget("bg"))
+            self.timingPointsFrame.winfo_children()[3].config(bg="green")
+            self.dragandzoomcanvas.set_cursor("cross")
+        else:
+            self.addTimingPointFlag = False
+            self.timingPointsFrame.winfo_children()[3].config(bg="SystemButtonFace")
+            self.dragandzoomcanvas.set_cursor("arrow")
+
+    def save_timing_points(self):
+        pass
+
+    def view_gps_point(self,event):
+        curItem = event.widget.identify_row(event.y)
+        print("in viewgps point selection is",event.widget.selection())
+        selection = event.widget.selection()[0]
+        if selection != "":
+            if selection == 'I001':
+                selection = "1"
+            self.dragandzoomcanvas.view_gps_point(int(selection)-1,redraw=True)
+
+    def receive_notification_of_point_click(self,index):
+        print("received notification of change of point to",index)
+        self.trackFrame.winfo_children()[1].selection_set(str(index))
 
     def scroll_data_window(self,event):
         print("event",event,event.widget.get())
@@ -400,17 +521,12 @@ class mainWindow(tkinter.Tk):
         pm2 = self.entryValues[5].get()
         if self.selectedRoute is None:
             return
-        img = Image.open("tracsis Logo.jpg")
-        imgSmall = img.resize((184,65),Image.ANTIALIAS)
-        excelImageSmall = openpyxl.drawing.image.Image(imgSmall)
-        excelImage = openpyxl.drawing.image.Image(img)
         self.startProgress("Exporting to Excel")
         self.progressWin.update()
         surveyDate = self.getDateFunction(1)
         wb = openpyxl.load_workbook("Template.xlsm",keep_vba=True)
         sheets = wb.get_sheet_names()
         print("first sheet is",sheets[0])
-        #wb.get_sheet_by_name(sheets[0]).add_image(excelImage,"B3")
 
         ###
         ### put big logo on front sheet
@@ -541,22 +657,15 @@ class mainWindow(tkinter.Tk):
             ###
             ### dump raw data to the excel sheet
             ###
-            for i, data in enumerate(trackList):
-                try:
-                    data = self.getTrack(data)
-                    data["Track No"] = "Track " + str(runsList[i])
-                    data[["Track No", "Record", "Time", "Lat", "Lon", "legTime", "legSpeed"]].apply(
-                        lambda x: rawData.append(x.tolist()), axis=1)
-                    sheet = wb.get_sheet_by_name('Raw Data')
-                    for i, row in enumerate(rawData):
-                        self.progress.step()
-                        self.progressWin.update()
-                        for j, item in enumerate(row):
-                            sheet.cell(row=i + 1, column=j + 1).value = item
-                except Exception as e:
-                    print("PHOOO")
-                    pass
-                    ### total hack, if we have deleted some runs and try to dump the data, when we look for track x
+            df = self.getFullDataframeFunction()
+            print("no of rows in raw data dataframe",len(df))
+            df[["Record", "Time", "Lat", "Lon", "legTime", "legSpeed"]].apply(lambda x: rawData.append(x.tolist()), axis=1)
+            sheet = wb.get_sheet_by_name('Raw Data')
+            for i, row in enumerate(rawData):
+                self.progress.step()
+                self.progressWin.update()
+                for j, item in enumerate(row):
+                    sheet.cell(row=i + 1, column=j + 1).value = item
         else:
             try:
                 sht = wb.get_sheet_by_name("Raw Data")
@@ -818,6 +927,8 @@ class mainWindow(tkinter.Tk):
             trackData[:-1].apply(lambda row: self.draw_leg_on_image((row["Lat"], row["Lon"]), (row["latNext"], row["lonNext"]), row["legSpeed"],drawimage),axis=1)
             if self.check4.get() == 1:
                 t = datetime.datetime.strftime(trackData.iloc[0]["Time"] +datetime.timedelta(hours=1),"%H:%M:%S")
+            else:
+                t = datetime.datetime.strftime(trackData.iloc[0]["Time"],"%H:%M:%S")
             drawimage.rectangle([0, 0, 100, 50], fill="white")
             drawimage.text((10, 10), text=t, font=fnt, fill="black")
             folder = os.path.dirname(os.path.abspath(__file__))
@@ -1592,6 +1703,11 @@ class mainWindow(tkinter.Tk):
             self.processSingleTrackFunction = fun
         if text == "getSpeed":
             self.getSpeedFunction = fun
+        if text == "getFullTracks":
+            self.getFullTracksFunction = fun
+        if text == "fullDataframe":
+            print("setting fun to ",fun)
+            self.getFullDataframeFunction = fun
 
     def change_zoom(self,val):
         if len(self.routeListBox.curselection()) ==0:
