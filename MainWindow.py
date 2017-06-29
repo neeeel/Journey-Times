@@ -182,17 +182,20 @@ class mainWindow(tkinter.Tk):
             return
         coords = df[["Lat","Lon"]].values.tolist()
         self.centrePoint = coords[0]
+        self.routeListBox.config(state=tkinter.DISABLED)
         routeName = self.routeListBox.get(self.routeListBox.curselection())
         route = self.routes[routeName]
-        tps = self.routes[routeName].get_timing_points()
         coords = [mapmanager2.get_coords(self.centrePoint, p, 10,size=800) for p in coords]
         win = tkinter.Toplevel()
+        win.protocol("WM_DELETE_WINDOW", lambda w = win:self.full_track_view_closed(w))
         self.dragandzoomcanvas = dragandzoomcanvas.DragAndZoomCanvas(win, 1500, 1000)
         self.dragandzoomcanvas.pack(side=tkinter.LEFT)
         self.dragandzoomcanvas.set_coords(coords)
         self.dragandzoomcanvas.set_centre_point(self.centrePoint)
         self.dragandzoomcanvas.set_route(route)
         self.dragandzoomcanvas.set_callback_function("notify change of point",self.receive_notification_of_point_click)
+        self.dragandzoomcanvas.set_callback_function("notify added timing point", self.receive_notification_of_timing_point_added)
+
         frame = tkinter.Frame(win, bg="white")
         self.trackTabs = ttk.Notebook(frame)
         self.timingPointsFrame = tkinter.Frame(frame,bg="white")
@@ -216,34 +219,37 @@ class mainWindow(tkinter.Tk):
         scroll.config(command=tree.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         values = df[["Record","Track","Lat","Lon","Time"]].values.tolist()
+        print("values",values[:25])
         for index,val in enumerate(values):
-            tree.insert("", "end", iid=index, values=val)
+            tree.insert("", "end", iid=str(index), values=val)
         tree.bind("<<TreeviewSelect>>", self.view_gps_point)
-        if len(tps[0]) < 50:
-            height = len(tps[0])
-        else:
-            height = 50
 
-        tree = ttk.Treeview(self.timingPointsFrame, columns=[0, 1, 2], height=height,show="headings")
+
+        tree = ttk.Treeview(self.timingPointsFrame, columns=[0, 1, 2],show="headings")
         for index, heading in enumerate([("Index",45), ("Lat",85), ("Lon",85)]):
             tree.column(index, width=heading[1])
             tree.heading(index, text=heading[0])
         tree.grid(row=0, column=0)
         tree.bind("<Button-1>", self.view_timing_point)
-        for tp in tps[0]:
-            tree.insert("", "end", iid=tp[0], values=[tp[0],tp[2],tp[3]])
+
         self.direction = tkinter.IntVar()
         self.direction.set(0)
+        self.direction_changed()
         tkinter.Radiobutton(self.timingPointsFrame,text = "Primary",variable=self.direction,value = 0, command=self.direction_changed,bg="white").grid(row=1,column=0)
         tkinter.Radiobutton(self.timingPointsFrame, text="Secondary", variable=self.direction,value =1, command=self.direction_changed,bg="white").grid(row=2, column=0)
-        tkinter.Button(self.timingPointsFrame,text="Add",command=self.add_timing_point).grid(row=3,column=0)
-        tkinter.Button(self.timingPointsFrame, text="Save", command=self.save_timing_points).grid(row=4, column=0)
+        tkinter.Button(self.timingPointsFrame,text="Add",command=self.activate_add_timing_point,width = 7).grid(row=3,column=0)
+        tkinter.Button(self.timingPointsFrame, text="Delete", command=self.delete_timing_point,width = 7).grid(row=4, column=0)
+        tkinter.Button(self.timingPointsFrame, text="Save", command=self.save_timing_points,width = 7).grid(row=5, column=0)
         self.dragandzoomcanvas.redraw_canvas()
 
 
         ###
         ### Track tree
         ###
+
+    def full_track_view_closed(self,win):
+        self.routeListBox.config(state=tkinter.NORMAL)
+        win.destroy()
 
     def direction_changed(self):
         print("direction is",self.direction.get())
@@ -263,7 +269,7 @@ class mainWindow(tkinter.Tk):
         if curItem != "":
             self.dragandzoomcanvas.view_timing_point(int(curItem)-1)
 
-    def add_timing_point(self):
+    def activate_add_timing_point(self):
         if self.addTimingPointFlag == False:
             self.addTimingPointFlag = True
             print("colour of button is",self.timingPointsFrame.winfo_children()[3].cget("bg"))
@@ -275,20 +281,55 @@ class mainWindow(tkinter.Tk):
             self.dragandzoomcanvas.set_cursor("arrow")
 
     def save_timing_points(self):
-        pass
+        file = filedialog.asksaveasfilename()
+        if file == "":
+            return
+        if not ".txt" in file:
+            file = file + ".txt"
+        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        route = self.routes[routeName]
+        route.save_timing_points(file)
+
+    def delete_timing_point(self):
+        tree = self.timingPointsFrame.winfo_children()[0]
+        if len(tree.selection()) == 0:
+            return
+        selection = tree.selection()[0]
+        tree.delete(selection)
+        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        route = self.routes[routeName]
+        route.delete_timing_point(self.direction.get(),selection)
+        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        route = self.routes[routeName]
+        self.dragandzoomcanvas.set_route(route)
+        self.direction_changed()
 
     def view_gps_point(self,event):
-        curItem = event.widget.identify_row(event.y)
+        curItem = event.widget.identify("row",event.x,event.y)
+        print("focused item is",event.widget.focus())
+        print("you clicked on", event.widget.item(curItem))
+        print("cur item is",curItem)
         print("in viewgps point selection is",event.widget.selection())
+        print("selection details",event.widget.item(event.widget.selection()[0]))
         selection = event.widget.selection()[0]
+        event.widget.focus(selection)
+        print("selection is",selection)
         if selection != "":
             if selection == 'I001':
                 selection = "1"
             self.dragandzoomcanvas.view_gps_point(int(selection)-1,redraw=True)
+        return "break"
 
     def receive_notification_of_point_click(self,index):
         print("received notification of change of point to",index)
-        self.trackFrame.winfo_children()[1].selection_set(str(index))
+        tree = self.trackFrame.winfo_children()[1]
+        tree.selection_set(index)
+        tree.see(tree.selection())
+        self.trackTabs.select(1)
+        tree.focus_set()
+
+    def receive_notification_of_timing_point_added(self):
+        self.direction_changed()
 
     def scroll_data_window(self,event):
         print("event",event,event.widget.get())

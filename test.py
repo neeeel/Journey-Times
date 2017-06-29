@@ -71,15 +71,39 @@ class Route():
             dir = "P"
         if dir == 1:
             dir = "S"
+        print("adding timing point",lat,long,dir,ID)
         if reorder == True:
             for index,tp in enumerate(self.timingPoints):
-                if tp[1] == dir and tp[0]>= ID:
+                print(tp)
+                if tp[1] == dir and tp[0]>= int(ID):
                     self.timingPoints[index] = (tp[0] + 1,dir,tp[2],tp[3])
         self.timingPoints.append((int(ID),dir,float(lat),float(long)))
         self.timingPoints = sorted(self.timingPoints, key=operator.itemgetter(1, 0))
         if not dir in self.dir:
             self.dir.append(dir)
             self.dir = sorted(self.dir)
+
+    def delete_timing_point(self,dir,ID):
+
+        if dir == 0:
+            dir = "P"
+        if dir == 1:
+            dir = "S"
+        print("deleting point", dir, ID)
+        print("before delete",self.timingPoints)
+        self.timingPoints = [tp for  tp in self.timingPoints if not (tp[1] == dir and tp[0] == int(ID))]
+        print("after delete", self.timingPoints)
+        for index, tp in enumerate(self.timingPoints):
+            print(tp)
+            if tp[1] == dir and tp[0] > int(ID):
+                self.timingPoints[index] = (tp[0] - 1, dir, tp[2], tp[3])
+
+    def save_timing_points(self,file):
+        output = [self.name + "/" + tp[1] + "/" + str(tp[0]) + "/" + str(tp[2]) + "," + str(tp[3]) + "\n" for tp in self.timingPoints]
+        print("output is",output)
+        with open(file,"w") as f:
+            f.writelines(output)
+
 
     def add_map(self,image):
         self.mapImage = image

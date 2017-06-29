@@ -25,6 +25,7 @@ class DragAndZoomCanvas(tkinter.Canvas):
         self.currentClosenessThreshold = 0.02 ### how close a point needs to get to a timing point to be marked as close
         self.timingPointsToDisplay = 0 ### primary direction
         self.currentlySelectedPoint = -1
+        self.notifyTimingPointAddedFunction = None
 
     def view_timing_point(self,index):
         iw, ih = self.width, self.height
@@ -95,7 +96,7 @@ class DragAndZoomCanvas(tkinter.Canvas):
             ### we need to adjust the viewport position so that the currently selected point
             ### is in the middle of the map panel, at 400,400
             ###
-            pointX,pointY = self.pixelCoords[self.currentPosition]
+            pointX,pointY = self.pixelCoords[self.currentlySelectedPoint]
             print("x,y",pointX,pointY)
             self.topLeftOfImage[0]  = pointX - cw/2
             self.topLeftOfImage[1] = pointY - ch/2
@@ -271,6 +272,24 @@ class DragAndZoomCanvas(tkinter.Canvas):
 
         newCoords = mapmanager2.get_lat_lon_from_x_y(self.centrePoint, x, y, 10)
         print("new coords", newCoords)
+        self.indexWindow = tkinter.Toplevel()
+        tkinter.Label(self.indexWindow,text="Enter Timing Point Index").grid(row=0,column=0)
+        self.indexEntry = tkinter.Entry(self.indexWindow)
+        self.indexEntry.grid(row=0,column=1)
+        tkinter.Button(self.indexWindow,text = "Save",command=lambda c = newCoords: self.save_timing_point(c)).grid(row=1,column=0,columnspan=2)
+
+    def save_timing_point(self,newCoords):
+        index = self.indexEntry.get()
+        if index == "":
+            return
+        try:
+            int(index)
+        except ValueError as e:
+            return
+        self.route.add_timing_point(newCoords[0],newCoords[1],self.timingPointsToDisplay,index,reorder=True)
+        self.indexWindow.destroy()
+        self.set_route(self.route)
+        self.notifyTimingPointAddedFunction()
 
     def map_clicked(self,event):
         x = self.canvasx(event.x)
@@ -305,10 +324,11 @@ class DragAndZoomCanvas(tkinter.Canvas):
                 elif "point" in tag:
                     point = int(tag.replace("point_",""))
                     print("point is now",point)
-                    self.currentPosition = point
+                    self.currentlySelectedPoint = point
 
-                    print("self.currentphotopos is",self.currentPosition)
-                    self.notifyPointChangeFunction(self.currentPosition)
+                    print("self.currentphotopos is",self.currentlySelectedPoint)
+                    self.notifyPointChangeFunction(self.currentlySelectedPoint)
+                    return
         else:
             ### user has clicked map only
             self.activity = "mapSelected"
@@ -394,8 +414,9 @@ class DragAndZoomCanvas(tkinter.Canvas):
         if type == "cross":
             if self.activity is None:
                 self.activity = "addTimingPoint"
-            else:
-                return
+        else:
+            if self.activity == "addTimingPoint":
+                self.activity = None
         self.config(cursor=type)
 
     def set_route(self,route):
@@ -408,6 +429,8 @@ class DragAndZoomCanvas(tkinter.Canvas):
     def set_callback_function(self,title,fun):
         if title == "notify change of point":
             self.notifyPointChangeFunction = fun
+        if title == "notify added timing point":
+            self.notifyTimingPointAddedFunction = fun
 
 points = [(56.40501,-3.45778),(56.40716,-3.48441),(56.44521,-3.47190)]
 #coords = [mapmanager2.get_coords(points[0],p,10) for p in points]
