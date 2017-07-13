@@ -202,8 +202,8 @@ class mainWindow(tkinter.Tk):
         self.trackTabs.add(self.timingPointsFrame,text = "Timing Points")
         self.trackFrame = tkinter.Frame(frame, bg="white",width = 300)
         self.trackTabs.add(self.trackFrame, text="Full Track")
-        self.completedRunsFrame = tkinter.Frame(frame, bg="white")
-        self.trackTabs.add(self.completedRunsFrame, text="Completed Runs")
+        self.failedRunsFrame = tkinter.Frame(frame, bg="white")
+        self.trackTabs.add(self.failedRunsFrame, text="Failed Runs")
         self.trackTabs.grid(row=0,column=0,sticky = "nsew")
         frame.pack(expand=tkinter.YES,fill=tkinter.BOTH,side=tkinter.LEFT)
 
@@ -225,6 +225,10 @@ class mainWindow(tkinter.Tk):
         tree.bind("<<TreeviewSelect>>", self.view_gps_point)
 
 
+
+        ###
+        ### timing points frame
+        ###
         tree = ttk.Treeview(self.timingPointsFrame, columns=[0, 1, 2],show="headings")
         for index, heading in enumerate([("Index",45), ("Lat",85), ("Lon",85)]):
             tree.column(index, width=heading[1])
@@ -234,18 +238,49 @@ class mainWindow(tkinter.Tk):
 
         self.direction = tkinter.IntVar()
         self.direction.set(0)
-        self.direction_changed()
+
         tkinter.Radiobutton(self.timingPointsFrame,text = "Primary",variable=self.direction,value = 0, command=self.direction_changed,bg="white").grid(row=1,column=0)
         tkinter.Radiobutton(self.timingPointsFrame, text="Secondary", variable=self.direction,value =1, command=self.direction_changed,bg="white").grid(row=2, column=0)
         tkinter.Button(self.timingPointsFrame,text="Add",command=self.activate_add_timing_point,width = 7).grid(row=3,column=0)
         tkinter.Button(self.timingPointsFrame, text="Delete", command=self.delete_timing_point,width = 7).grid(row=4, column=0)
         tkinter.Button(self.timingPointsFrame, text="Save", command=self.save_timing_points,width = 7).grid(row=5, column=0)
+
+        ###
+        ### Failed runs frame
+        ###
+        scroll2 = tkinter.Scrollbar(self.trackFrame)
+        tree = ttk.Treeview(self.failedRunsFrame,columns=[0,1,2], show="headings", height=20,yscrollcommand=scroll2.set)
+        for index,heading in enumerate([("Start",40),("End",40),("Timing Point",80)]):
+            tree.column(index,width = heading[1])
+            tree.heading(index,text = heading[0])
+        tree.grid(row=0,column=0)
+        tree.bind("<Button-1>",self.failed_runs_clicked)
+        scroll2.config(command=tree.yview)
+        scroll2.grid(row=0, column=1, sticky="ns")
+        tkinter.Radiobutton(self.failedRunsFrame,text = "Primary",variable=self.direction,value = 0, command=self.direction_changed,bg="white").grid(row=1,column=0)
+        tkinter.Radiobutton(self.failedRunsFrame, text="Secondary", variable=self.direction,value =1, command=self.direction_changed,bg="white").grid(row=2, column=0)
+        for item in self.baseData[self.direction.get()][3]:
+            tree.insert("","end",values = item)
+
+
+        self.direction_changed()
         self.dragandzoomcanvas.redraw_canvas()
 
 
-        ###
-        ### Track tree
-        ###
+
+    def failed_runs_clicked(self,event):
+        widget = event.widget
+        print(event.x,event.y)
+        row = widget.identify_row(event.y)
+        col = widget.identify_column(event.x)
+        print("row,col",row,col)
+        print(widget.identify_element(event.x,event.y))
+        print(widget.set(row,col))
+        if col  == "#3":
+            self.view_timing_point(None,index=int(widget.set(row,col)))
+        else:
+            self.view_gps_point(None,index=int(widget.set(row,col)))
+
 
     def full_track_view_closed(self,win):
         self.routeListBox.config(state=tkinter.NORMAL)
@@ -260,14 +295,25 @@ class mainWindow(tkinter.Tk):
         tree.configure(height=len(tps[self.direction.get()]))
         for tp in tps[self.direction.get()]:
             tree.insert("", "end", iid=tp[0], values=[tp[0],tp[2],tp[3]])
+        ###
+        ### set up failed runs tree
+        ###
+        tree = self.failedRunsFrame.winfo_children()[0]
+        tree.delete(*tree.get_children())
+        for item in self.baseData[self.direction.get()][3]:
+            tree.insert("","end",values = item)
+
         self.dragandzoomcanvas.set_timing_points_to_display(self.direction.get())
 
-    def view_timing_point(self,event):
-        curItem = event.widget.identify_row(event.y)
-        print(curItem)
-        print(event.widget.selection())
-        if curItem != "":
-            self.dragandzoomcanvas.view_timing_point(int(curItem)-1)
+    def view_timing_point(self,event,index=None):
+        if not event  is None:
+            curItem = event.widget.identify_row(event.y)
+            print(curItem)
+            print(event.widget.selection())
+            if curItem != "":
+                self.dragandzoomcanvas.view_timing_point(int(curItem)-1)
+        if not index is None:
+            self.dragandzoomcanvas.view_timing_point(index-1)
 
     def activate_add_timing_point(self):
         if self.addTimingPointFlag == False:
@@ -304,20 +350,17 @@ class mainWindow(tkinter.Tk):
         self.dragandzoomcanvas.set_route(route)
         self.direction_changed()
 
-    def view_gps_point(self,event):
-        curItem = event.widget.identify("row",event.x,event.y)
-        print("focused item is",event.widget.focus())
-        print("you clicked on", event.widget.item(curItem))
-        print("cur item is",curItem)
-        print("in viewgps point selection is",event.widget.selection())
-        print("selection details",event.widget.item(event.widget.selection()[0]))
-        selection = event.widget.selection()[0]
-        event.widget.focus(selection)
-        print("selection is",selection)
-        if selection != "":
-            if selection == 'I001':
-                selection = "1"
-            self.dragandzoomcanvas.view_gps_point(int(selection)-1,redraw=True)
+    def view_gps_point(self,event,index=None):
+        if not event is None:
+            selection = event.widget.selection()[0]
+            event.widget.focus(selection)
+            print("selection is",selection)
+            if selection != "":
+                if selection == 'I001':
+                    selection = "1"
+                self.dragandzoomcanvas.view_gps_point(int(selection)-1,redraw=True)
+        if not index is None:
+            self.dragandzoomcanvas.view_gps_point(index, redraw=True)
         return "break"
 
     def receive_notification_of_point_click(self,index):
@@ -388,9 +431,6 @@ class mainWindow(tkinter.Tk):
             self.display_data(dataToDisplay)
 
     def display_data(self, result):
-
-
-
         if result is None:
             # print("Stopping progress now -----")
             self.stopProgress()

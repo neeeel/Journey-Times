@@ -30,6 +30,7 @@ def miles_to_km(miles):
     return miles * 1.60934
 
 def getDistInMiles(p1,p2):
+    #print(p1,p2)
     if p1 == p2:
         return 0
     lat1,long1 = p1

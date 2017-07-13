@@ -333,9 +333,13 @@ class DragAndZoomCanvas(tkinter.Canvas):
             ### user has clicked map only
             self.activity = "mapSelected"
             self.dragInfo["tag"] = "map"
-
         self.bind("<B1-Motion>", self.on_movement)
         self.bind("<ButtonRelease-1>", self.on_release_to_move_map)
+
+
+
+
+
 
     def set_centre_point(self,p):
         ###

@@ -67,6 +67,9 @@ class MapManager():
         #print("second version, zoom is",20 - zoom)
         return 20 - zoom
 
+
+
+
     def get_map(self):
         return self.static_map
 
