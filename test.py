@@ -105,7 +105,6 @@ class Route():
         with open(file,"w") as f:
             f.writelines(output)
 
-
     def add_map(self,image):
         self.mapImage = image
         #self.mapImage.show()
@@ -527,7 +526,7 @@ def process_direction(timingPoints):
 
     print("number of legs greater than 1 minute is", len(df[df["legTime"] > 60]),
           df[df["legTime"] > 60].index.values.tolist())
-    segments = df[df["legTime"] > 60].index.values.tolist()
+    segments = df[df["legTime"] > 600].index.values.tolist()
     segments.append(len(df) - 1)
     segments.insert(0, 0)
     print("segments are", segments)
@@ -539,7 +538,6 @@ def process_direction(timingPoints):
         ###
         ### get the rough estimates of starting points for tracks.
         ###
-        #startList = (getStartPoints(segments[i] + 1, segments[i + 1], timingPoints[0], timingPoints[1]))
         startList = get_start_points_new(segments[i] + 1, segments[i + 1], timingPoints[0])
         if startList == []:
             continue  ## check the next segment
@@ -552,21 +550,15 @@ def process_direction(timingPoints):
             tpIndex = 1
             tp = timingPoints[tpIndex]
             closestPoint = [point,1000]
-            #if pointIndex == len(startList)-1:
-                #endPoint = segments[i + 1]
-            #else:
-                #endPoint = startList[pointIndex + 1]
             endPoint = segments[i + 1]
             print("endpoint is",endPoint)
             while point < endPoint:
-                #print("processing point", point)
                 pointData = df.iloc[point]
                 tp = timingPoints[tpIndex]
                 dist = ut.getDistInMiles(tp,(pointData["Lat"],pointData["Lon"]))
                 if dist < closestPoint[1]:
                     closestPoint[0] = point
                     closestPoint[1] = dist
-                #print("point is",point,"dist is",dist,"tp no is",tpIndex,tp)
                 if dist <= 0.02:
                     ###
                     ### we have a qualifying point, but there may be a nearby point that is closer
@@ -580,8 +572,6 @@ def process_direction(timingPoints):
                     journey.append(point)
                     print("journey is",journey)
                     tpIndex += 1
-                    if tpIndex == 8:
-                        print("WERWER")
                     closestPoint = [point, 1000]
                     if tpIndex >= len(timingPoints):
                         break
@@ -604,8 +594,6 @@ def process_direction(timingPoints):
     print("final list is",finalList)
     trackList = finalList
     print("after filtering for equal end times of journeys, tracklist is",trackList)
-    #print("setted tracklist is",set(trackList))
-    #trackList = finalList
     finalList = []
     distList = []
     discardedList  = []
@@ -617,11 +605,8 @@ def process_direction(timingPoints):
         speeds = result[0]
         l = []
         times = [df.iloc[s]["Time"].strftime('%H:%M:%S') for s in track]
-
-
         l.append(track)
         l.append(times)
-
         l.append(speeds)
         print("final run details", l)
         finalList.append(l)
@@ -845,7 +830,6 @@ def get_start_points_new(startIndex,dataEnd,tpStart):
     ###
 
     temp = df.copy()
-    print("leght is",len(temp))
     if dataEnd-startIndex < 10:
         return []
     temp["distToTP1"] = temp.iloc[startIndex:dataEnd][["Lat", "Lon"]].apply(lambda x: ut.getDistInMiles(x.tolist(), tpStart),axis=1)
@@ -924,28 +908,6 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
     closestPoint = min(data,key=operator.itemgetter(1))
     return(closestPoint[0] + startIndex)
 
-
-
-def supertram_processing(route):
-    global df
-    timingPoints = [(x[2], x[3]) for x in route.get_timing_points()[0]]
-    temp = df.copy()
-    for index,tp in enumerate(timingPoints):
-        temp["distToTP" + str(index + 1)] = temp[["Lat","Lon"]].apply(lambda x:ut.getDistInMiles(x.tolist(),tp),axis=1)
-    temp.set_index("Time",inplace=True)
-    selected = temp.groupby(pd.TimeGrouper(freq="15Min"))
-    print("_"*100)
-    dfs = []
-    for index, tp in enumerate(timingPoints):
-        dfs.append(selected.apply(lambda x: x[(x["distToTP" + str(index+ 1)] == x["distToTP" + str(index+ 1)].min()) & (x["distToTP" + str(index+ 1)] < 0.02) ])[["Lat","Lon","distToTP" + str(index+ 1)]])
-    result = pd.concat(dfs)
-    print(result)
-    result.to_csv("closest Points.csv")
-
-
-    return
-
-
 def supertrams2(route):
     timingPoints = [(x[2], x[3]) for x in route.get_timing_points()[0]]
     temp = df.copy()
@@ -983,9 +945,6 @@ def supertrams2(route):
         writer.writerows(results)
     return
 
-
-
-
 def parse_gsd(row):
     #print(type(row))
     if type(row[0]) == str:
@@ -1012,6 +971,7 @@ def parse_gsd(row):
                 hr = data[2][:2]
             return [data[0],data[1],datetime.datetime(int("20" + yr),int(mnth),int(day),int(hr),int(min),int(sec),0,None)]
         return None
+
 
 
 

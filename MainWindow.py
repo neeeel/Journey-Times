@@ -16,6 +16,7 @@ import time
 import os
 import dragandzoomcanvas
 import mapmanager2
+import pandas as pd
 
 
 
@@ -174,7 +175,6 @@ class mainWindow(tkinter.Tk):
         print("canvas size is",canvas.winfo_width(),canvas.winfo_height(),canvas.winfo_reqwidth(),canvas.winfo_reqheight())
         print("frame size is", innerFrame.winfo_width(), innerFrame.winfo_height(), innerFrame.winfo_reqwidth(),innerFrame.winfo_reqheight())
 
-
     def view_full_track(self):
 
         df = self.getFullTracksFunction()
@@ -266,8 +266,6 @@ class mainWindow(tkinter.Tk):
         self.direction_changed()
         self.dragandzoomcanvas.redraw_canvas()
 
-
-
     def failed_runs_clicked(self,event):
         widget = event.widget
         print(event.x,event.y)
@@ -280,7 +278,6 @@ class mainWindow(tkinter.Tk):
             self.view_timing_point(None,index=int(widget.set(row,col)))
         else:
             self.view_gps_point(None,index=int(widget.set(row,col)))
-
 
     def full_track_view_closed(self,win):
         self.routeListBox.config(state=tkinter.NORMAL)
@@ -437,7 +434,7 @@ class mainWindow(tkinter.Tk):
             return
         primary = result[0]
         secondary = result[1]
-        # print("Secondary is ",secondary)
+        print("Secondary is ",secondary)
         self.displayPrimary(primary)
         self.displaySecondary(secondary)
         # ("Stopping progress now")
@@ -458,10 +455,19 @@ class mainWindow(tkinter.Tk):
         print(str(self.progressWin.winfo_width()) + "x" + str(self.progressWin.winfo_height()) + "+" + str(x) + "+" + str(y))
         self.progressWin.geometry("+" + str(x) + "+" + str(y))
         self.progressWin.lift()
+        self.processing = True
+
+    def step_progress(self):
+        while self.processing == True:
+            self.progress.step()
+            self.after(100,self.step_progress)
+
+
 
     def stopProgress(self):
         #print("in self.stop progress")
         print("progressbar is", type(self.progress))
+        self.processing = False
         if self.progress is None:
             pass
         else:
@@ -520,23 +526,17 @@ class mainWindow(tkinter.Tk):
     def excel_settings_closed(self):
         self.excelWindow.destroy()
 
-    def export(self):
+    def start_export(self):
         file = filedialog.asksaveasfilename()
         print(file)
+        self.startProgress("Exporting to Excel")
+        threading.Thread(target=self.export,args=(file,)).start()
+
+    def export(self,file):
         if file == "":
             messagebox.showinfo(message="no file name entered, exiting Export")
+            self.stopProgress()
             return
-        for child in self.excelWindow.winfo_children():
-            widget = self.nametowidget(child)
-            if type(widget) == tkinter.Checkbutton:
-                if widget.cget("text") == "Primary":
-                    if widget.get() == 1:
-                        print("yes")
-
-        dir = self.entryValues[4].get()
-        am = self.entryValues[1].get()
-        ip = self.entryValues[2].get()
-        pm = self.entryValues[3].get()
         primaryDirection = self.cbox.get()
         if primaryDirection == "North":
             primaryDirection = "Northbound"
@@ -569,8 +569,6 @@ class mainWindow(tkinter.Tk):
                     print(e)
             self.save_track_as_image(self.primaryTrackList)
             self.export_to_excel(self.primaryTrees,TPs,self.primaryTrackList,file + " " + primaryDirection)
-
-
         if self.check2.get() == 1:
             folder = os.path.dirname(os.path.abspath(__file__))
             print(folder)
@@ -588,6 +586,7 @@ class mainWindow(tkinter.Tk):
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[1]]
             self.save_track_as_image(self.secondaryTrackList, direction="s")
             self.export_to_excel(self.secondaryTrees, TPs, self.secondaryTrackList,file + " " + secondaryDirection)
+        self.stopProgress()
 
     def export_to_excel(self,trees,timingPoints,trackList,filename):
         AMRuns = 0
@@ -602,8 +601,8 @@ class mainWindow(tkinter.Tk):
         pm2 = self.entryValues[5].get()
         if self.selectedRoute is None:
             return
-        self.startProgress("Exporting to Excel")
-        self.progressWin.update()
+
+
         surveyDate = self.getDateFunction(1)
         wb = openpyxl.load_workbook("Template.xlsm",keep_vba=True)
         sheets = wb.get_sheet_names()
@@ -644,8 +643,8 @@ class mainWindow(tkinter.Tk):
             return
         tpCount = len(timingPoints)
         for i,child in enumerate(trees[0].get_children()):
-            self.progress.step()
-            self.progressWin.update()
+            #self.progress.step()
+            #self.progressWin.update()
             flag = False
             #print(self.journeyTimesTree.item(child)["values"])
             #print(trees[0].item(child)["values"][1],type(trees[0].item(child)["values"][1]))
@@ -673,8 +672,8 @@ class mainWindow(tkinter.Tk):
         rawData = []
         print("runslist is",runsList)
         for i,run in enumerate(runsList):
-            self.progress.step()
-            self.progressWin.update()
+            #self.progress.step()
+            #self.progressWin.update()
             for j in range(tpCount):
                 if self.check4.get() == 1:
                     ### add on an hour
@@ -691,16 +690,26 @@ class mainWindow(tkinter.Tk):
             for j in range(tpCount):
                 sheet.cell(row=2 + i, column=j + (2 * tpCount) + 2).value = trees[2].item(run)["values"][j + 1]
 
-
-        sheet["A1"] = AMRuns
-        sheet["B1"] = self.entryValues[0].get()
-        sheet["C1"] = self.entryValues[1].get()
-        sheet["D1"] = IPRuns
-        sheet["E1"] = self.entryValues[2].get()
-        sheet["F1"] = self.entryValues[3].get()
-        sheet["G1"] = PMRuns
-        sheet["H1"] = self.entryValues[4].get()
-        sheet["I1"] = self.entryValues[5].get()
+        if self.check4.get() == 1:
+            sheet["A1"] = AMRuns
+            sheet["B1"] = datetime.datetime.strftime(datetime.datetime.strptime(self.entryValues[0].get(),"%H:%M")+datetime.timedelta(hours=1),"%H:%M")
+            sheet["C1"] = datetime.datetime.strftime(datetime.datetime.strptime(self.entryValues[1].get(),"%H:%M")+datetime.timedelta(hours=1),"%H:%M")
+            sheet["D1"] = IPRuns
+            sheet["E1"] = datetime.datetime.strftime(datetime.datetime.strptime(self.entryValues[2].get(),"%H:%M")+datetime.timedelta(hours=1),"%H:%M")
+            sheet["F1"] = datetime.datetime.strftime(datetime.datetime.strptime(self.entryValues[3].get(),"%H:%M")+datetime.timedelta(hours=1),"%H:%M")
+            sheet["G1"] = PMRuns
+            sheet["H1"] = datetime.datetime.strftime(datetime.datetime.strptime(self.entryValues[4].get(),"%H:%M")+datetime.timedelta(hours=1),"%H:%M")
+            sheet["I1"] = datetime.datetime.strftime(datetime.datetime.strptime(self.entryValues[5].get(),"%H:%M")+datetime.timedelta(hours=1),"%H:%M")
+        else:
+            sheet["A1"] = AMRuns
+            sheet["B1"] = self.entryValues[0].get()
+            sheet["C1"] = self.entryValues[1].get()
+            sheet["D1"] = IPRuns
+            sheet["E1"] = self.entryValues[2].get()
+            sheet["F1"] = self.entryValues[3].get()
+            sheet["G1"] = PMRuns
+            sheet["H1"] = self.entryValues[4].get()
+            sheet["I1"] = self.entryValues[5].get()
         sheet["J1"] = tpCount
         sheet["K1"] = surveyDate
         folder = os.path.dirname(os.path.abspath(__file__))
@@ -715,8 +724,8 @@ class mainWindow(tkinter.Tk):
             self.trackData = self.getTrack(trackList[0])
         offset=trackList[0][0]
         for i,t in enumerate(trackList[0][:-1]):
-            self.progress.step()
-            self.progressWin.update()
+           # self.progress.step()
+            #self.progressWin.update()
             #print(track[0][i],track[0][i+1],"offset is",offset)
             #print("dist between tps is",self.trackData["legDist"][self.trackList[0][i]-offset:self.trackList[0][i+1]-offset].sum())
             values = trees[5].item(trees[5].get_children()[0])["values"][1:]
@@ -743,8 +752,8 @@ class mainWindow(tkinter.Tk):
             df[["Record", "Time", "Lat", "Lon", "legTime", "legSpeed"]].apply(lambda x: rawData.append(x.tolist()), axis=1)
             sheet = wb.get_sheet_by_name('Raw Data')
             for i, row in enumerate(rawData):
-                self.progress.step()
-                self.progressWin.update()
+                #self.progress.step()
+                #self.progressWin.update()
                 for j, item in enumerate(row):
                     sheet.cell(row=i + 1, column=j + 1).value = item
         else:
@@ -780,7 +789,6 @@ class mainWindow(tkinter.Tk):
             print("couldnt save",e)
 
         self.excel_settings_closed()
-        self.stopProgress()
 
     def set_end_point(self,event):
         curItem = event.widget.identify_row(event.y)
@@ -1185,7 +1193,7 @@ class mainWindow(tkinter.Tk):
         self.check2.set(1)
         self.check3.set(0)
         self.check4.set(0)
-        tkinter.Button(frame,text = "Export",command = self.export).grid(row  = 6,column  =0,padx=10, pady=10)
+        tkinter.Button(frame,text = "Export",command = self.start_export).grid(row  = 6,column  =0,padx=10, pady=10)
         tkinter.Button(frame, text="Exit", command = self.excel_settings_closed).grid(row=6, column=1,padx=10, pady=10)
 
     def spawn_settings_window(self):
@@ -1571,10 +1579,6 @@ class mainWindow(tkinter.Tk):
                 canvas = w
                 frame = w.winfo_children()[0]
         print(type(frame))
-        print("canvas size is", canvas.winfo_width(), canvas.winfo_height(), canvas.winfo_reqwidth(),
-              canvas.winfo_reqheight())
-        print("frame size is", frame.winfo_width(), frame.winfo_height(), frame.winfo_reqwidth(),
-              frame.winfo_reqheight())
 
         distances = result[1]
         result = result[0]
@@ -1586,10 +1590,7 @@ class mainWindow(tkinter.Tk):
             #####
             style = ttk.Style()
             style.configure("Treeview.Heading.label", font='helvetica 24')
-            #print(style.layout("Treeheading"))
-            #ttk.Style.configure(style="Treeview.Heading", foreground='white',bg="blue")
             self.primaryTrees = []
-            labels = []
             width = 65
             cols = tuple(range(len(result[0][0]) + 1))
             totalWidth = len(cols) * width
@@ -1856,6 +1857,27 @@ class mainWindow(tkinter.Tk):
                     f.write(str(e.get()) + "\n")
             print("writing ", self.unitsVar.get())
             f.write(str(self.unitsVar.get()) + "\n")
+
+    def dump_raw_data(self):
+        writer = pd.ExcelWriter("raw data primary.xlsx")
+        for index,track in enumerate(self.primaryTrackList):
+            data = self.getTrack(track)
+            if self.check4.get() == 1:
+                data["Time"] = data["Time"] + datetime.timedelta(hours=1)
+            data["accel"] = (data["legSpeed"] - data["legSpeed"].shift(1))/data["legTime"]
+            data[["Time","Lat","Lon","legTime","legDist","legSpeed","accel"]].to_excel(writer,"track " + str(index))
+        writer.save()
+        writer = pd.ExcelWriter("raw data secondary.xlsx")
+        for index,track in enumerate(self.secondaryTrackList):
+            data = self.getTrack(track)
+            if self.check4.get() == 1:
+                data["Time"] = data["Time"] + datetime.timedelta(hours=1)
+            data["accel"] = (data["legSpeed"] - data["legSpeed"].shift(1))/data["legTime"]
+            data[["Time","Lat","Lon","legTime","legDist","legSpeed","accel"]].to_excel(writer,"track " + str(index))
+        writer.save()
+
+
+
 
 def wrapper_function(fun,routeName,fileList):
     result = fun(routeName,fileList)

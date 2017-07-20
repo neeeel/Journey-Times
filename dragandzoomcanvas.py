@@ -116,9 +116,11 @@ class DragAndZoomCanvas(tkinter.Canvas):
         extraTags = []
         print("resolution is",resolution,"no of points is",len(self.pixelCoords),"no of visible points is",int(len(self.pixelCoords)/resolution))
         visiblePoints = [(index,p) for index,p in enumerate(self.pixelCoords) if p[0] >= self.topLeftOfImage[0] - (2*cw) and p[0] <= self.topLeftOfImage[0] + 2*cw and p[1] >= self.topLeftOfImage[1]- (2*cw) and p[1] <= self.topLeftOfImage[1] + 2*cw ]
-        resolution = int(len(visiblePoints)/1500)
-        if resolution < 1:
+
+        if len(visiblePoints) < 10000 or resolution < 1:
             resolution = 1
+        else:
+            resolution = int(len(visiblePoints) / 1500)
         print("no of visible points is", len(visiblePoints),"resolution is",resolution)
         for index,p in enumerate(visiblePoints):
             if index%resolution == 0: ### we only want to display a few points if the resolution is "high"
@@ -250,7 +252,7 @@ class DragAndZoomCanvas(tkinter.Canvas):
                     ###
                     dx = (self.pixelToMilesRatio * self.currentClosenessThreshold)/cw * self.width
                     dy = (self.pixelToMilesRatio * self.currentClosenessThreshold)/ch * self.height
-                    self.create_oval(x-dx,y-dy,x+dx,y+dy,fill = "",outline="gold",tags=[str(direction) + "_timingpoint_" + str(index),])
+                    self.create_oval(x-dx,y-dy,x+dx,y+dy,fill = "",outline="gold",width = 3,tags=[str(direction) + "_timingpoint_" + str(index),])
 
         print("no of points drawn",pointCount)
 
@@ -335,10 +337,6 @@ class DragAndZoomCanvas(tkinter.Canvas):
             self.dragInfo["tag"] = "map"
         self.bind("<B1-Motion>", self.on_movement)
         self.bind("<ButtonRelease-1>", self.on_release_to_move_map)
-
-
-
-
 
 
     def set_centre_point(self,p):
