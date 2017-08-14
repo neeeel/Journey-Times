@@ -151,7 +151,7 @@ class MapViewer(pyglet.window.Window):
 
     def on_draw(self):
         start = time.time() * 1000
-        #glEnable(GL_BLEND)
+        glEnable(GL_BLEND)
         glEnable(GL_DEPTH_TEST)
         #glBlendFunc(GL_SRC_ALPHA, GL_ONE)
         #glEnable(GL_LINE_SMOOTH)
@@ -161,7 +161,7 @@ class MapViewer(pyglet.window.Window):
         self.clear()
         #print("no of prpmitives drawn",len(self.smallCirclesList + self.largeCirclesList))
         glEnable(GL_POINT_SMOOTH)
-        glHint(GL_POINT_SMOOTH_HINT, GL_FASTEST)
+        glHint(GL_POINT_SMOOTH_HINT, GL_NICEST)
         glPointSize(6)
         self.smallCircleBatch.draw()
         glPointSize(16)
@@ -196,7 +196,7 @@ class MapViewer(pyglet.window.Window):
         self.pointsAsVertices = [self.height - item   if index % 2 == 1 else item for index,item in enumerate(self.pointsAsVertices)]
         self.largeCirclesVertexList = self.largeCircleBatch.add(len(self.pointsAsVertices)//2,GL_POINTS,None,("v2f/stream",self.pointsAsVertices),('c3B/static', (0,20,244)* (len(self.pointsAsVertices)//2)))
         self.smallCirclesVertexList = self.smallCircleBatch.add(len(self.pointsAsVertices)//2,GL_POINTS,None,("v2f/stream",list(self.pointsAsVertices)),('c3B/static', (150,20,20)* (len(self.pointsAsVertices)//2)))
-        self.linesVertexList = self.linesBatch.add(len(self.pointsAsVertices)//2,GL_LINES,None,("v2f/stream",list(self.pointsAsVertices)),('c3B/static', (150,20,20)* (len(self.pointsAsVertices)//2)))
+        self.linesVertexList = self.linesBatch.add(len(self.pointsAsVertices)//2,GL_LINE_STRIP,None,("v2f/stream",list(self.pointsAsVertices)),('c3B/static', (150,20,20)* (len(self.pointsAsVertices)//2)))
         return
         #self.pixelCoords = visiblePoints
         start = time.time() * 1000
