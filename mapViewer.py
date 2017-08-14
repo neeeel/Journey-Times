@@ -3,6 +3,7 @@ from pyglet.gl import *
 import itertools
 from itertools import chain
 import pickle
+import random
 import time
 from pyglet.window import mouse
 pyglet.options['debug_gl'] = False
@@ -50,14 +51,22 @@ class MapViewer(pyglet.window.Window):
         self.timingPointsToDisplay = 0  ### primary direction
         self.currentlySelectedPoint = -1
         self.notifyTimingPointAddedFunction = None
-        self.visibleBatch = pyglet.graphics.Batch()
-        self.invisibleBatch = pyglet.graphics.Batch()
+        self.largeCircleBatch = pyglet.graphics.Batch()
+        self.smallCircleBatch = pyglet.graphics.Batch()
+        self.linesBatch = pyglet.graphics.Batch()
         with open("coords.pkl","rb") as f:
             self.pixelCoords =pickle.load(f)#[200:205]
         self.set_up_vertex_lists()
-        self.set_background_color(120,120,120,1)
+        #self.set_background_color(120,120,120,1)
         self.selectedVertexLists = []
         #self.vertexList = self.circle(100, 100, 5, 200, RED + RED * 200, self.visibleBatch,None)
+        random.seed()
+        for i in range(18000):
+            self.selectedVertexLists.append(random.randint(0,self.width))
+            self.selectedVertexLists.append(random.randint(0,self.height))
+            #pyglet.graphics.draw(1,GL_POINTS,("v2f/dynamic",[random.randint(0,800),random.randint(0,800)]),('c3B/static', (245,244,244)))
+        print(len(self.selectedVertexLists)//2)
+        #self.visiblePoints = self.visibleBatch.add(len(self.selectedVertexLists)//2,GL_POINTS,None,("v2f/stream",self.selectedVertexLists),('c3B/static', (0,20,244)* 18000))
 
     def set_background_color(self,r, g, b, a):
         self.background = pyglet.image.SolidColorImagePattern((r, g, b, a)).create_image(800, 800)
@@ -125,7 +134,8 @@ class MapViewer(pyglet.window.Window):
         print("top left of image is now",self.topLeftOfImage)
         start = time.time() * 1000
         self.redraw_canvas()
-        print("redraw canvas took",time.time()*1000 - start)
+        if time.time()*1000 - start > 1000:
+            print("redraw canvas took",time.time()*1000 - start)
 
     def circle(self,x, y, r, n, c, b,group):
         """ Adds a vertex list of circle polygon to batch and returns it. """
@@ -142,35 +152,39 @@ class MapViewer(pyglet.window.Window):
     def on_draw(self):
         start = time.time() * 1000
         #glEnable(GL_BLEND)
-       # glEnable(GL_DEPTH_TEST)
+        glEnable(GL_DEPTH_TEST)
         #glBlendFunc(GL_SRC_ALPHA, GL_ONE)
         #glEnable(GL_LINE_SMOOTH)
         #glHint(GL_LINE_SMOOTH_HINT, GL_FASTEST)
         pyglet.gl.glLineWidth(6)
         gl.glClearColor(232/255,232/255,232/255, 1.0)
         self.clear()
-        print("no of prpmitives drawn",len(self.smallCirclesList + self.largeCirclesList))
-        #glEnable(GL_POINT_SMOOTH)
-        #glHint(GL_POINT_SMOOTH_HINT, GL_FASTEST)
+        #print("no of prpmitives drawn",len(self.smallCirclesList + self.largeCirclesList))
+        glEnable(GL_POINT_SMOOTH)
+        glHint(GL_POINT_SMOOTH_HINT, GL_FASTEST)
         glPointSize(6)
-        self.smallCircles.draw_subset(self.smallCirclesList)
+        self.smallCircleBatch.draw()
         glPointSize(16)
-        self.largeCircles.draw_subset(self.largeCirclesList)
-
+        #self.largeCircles.draw_subset(self.largeCirclesList)
+        random.seed()
+        self.largeCircleBatch.draw()
         #self.smallCircles.migrate()
-
-        self.visibleBatch.draw_subset(self.visiblePoints)
-        self.fps_display.draw()
+        self.linesBatch.draw()
+        #self.visibleBatch.draw_subset(self.visiblePoints)
+        #self.fps_display.draw()
         #if not self.background is None:
             #self.background.blit(0, 0)
-        print("on draw took", time.time() * 1000 - start)
+        if time.time()*1000 - start > 100:
+            print("redraw canvas took",time.time()*1000 - start)
 
     def set_up_vertex_lists(self):
         radius = 7
-        self.pointsAsVertices =[]
+
+
+        self.pointsAsVertices = None
         self.linesAsVertices = []
-        self.smallCirclesList= []
-        self.largeCirclesList= []
+        self.smallCirclesList= None
+        self.largeCirclesList= None
         lineGroup = pyglet.graphics.OrderedGroup(1)
         circleGroup = pyglet.graphics.OrderedGroup(0)
         self.smallCircles = pyglet.graphics.Batch()
@@ -178,8 +192,15 @@ class MapViewer(pyglet.window.Window):
         previousX = 0
         previousY = 0
         visiblePoints = [(i, c) for i, c in enumerate(self.pixelCoords)]
-        self.pixelCoords = visiblePoints
+        self.pointsAsVertices = [element for tupl in self.pixelCoords for element in tupl]
+        self.pointsAsVertices = [self.height - item   if index % 2 == 1 else item for index,item in enumerate(self.pointsAsVertices)]
+        self.largeCirclesVertexList = self.largeCircleBatch.add(len(self.pointsAsVertices)//2,GL_POINTS,None,("v2f/stream",self.pointsAsVertices),('c3B/static', (0,20,244)* (len(self.pointsAsVertices)//2)))
+        self.smallCirclesVertexList = self.smallCircleBatch.add(len(self.pointsAsVertices)//2,GL_POINTS,None,("v2f/stream",list(self.pointsAsVertices)),('c3B/static', (150,20,20)* (len(self.pointsAsVertices)//2)))
+        self.linesVertexList = self.linesBatch.add(len(self.pointsAsVertices)//2,GL_LINES,None,("v2f/stream",list(self.pointsAsVertices)),('c3B/static', (150,20,20)* (len(self.pointsAsVertices)//2)))
+        return
+        #self.pixelCoords = visiblePoints
         start = time.time() * 1000
+        #vertices = [element for tupl in self.pixelCoords for element in tupl]
         for index, p in enumerate(visiblePoints):
             #print(index,p)
             x, y = p[1]
@@ -199,6 +220,12 @@ class MapViewer(pyglet.window.Window):
         print("took",time.time() * 1000 - start)
 
     def redraw_canvas(self):
+
+        start = time.time() * 1000
+        self.selectedVertexLists = []
+
+
+
         iw, ih = self.width,self.height #width,height
         # calculate crop window size
         cw, ch = iw / self.mapScale, ih / self.mapScale
@@ -218,27 +245,32 @@ class MapViewer(pyglet.window.Window):
         self.smallCirclesList = []
         self.largeCirclesList= []
         start = time.time() * 1000
-        visiblePoints = [p[0] for p in self.pixelCoords if p[1][0] > self.topLeftOfImage[0] and p[1][0] < self.topLeftOfImage[0] + cw and self.pixelCoords if p[1][1] < self.topLeftOfImage[1] and p[1][1] > self.topLeftOfImage[1] - ch]
-        print("setting up visible points took", time.time() * 1000 - start)
-        print("no of visible points would be", len(visiblePoints))
-        resolution = int(len(visiblePoints)/2000)
-        if resolution < 1:
-            resolution = 1
+        #visiblePoints = [p[0] for p in self.pixelCoords if p[1][0] > self.topLeftOfImage[0] and p[1][0] < self.topLeftOfImage[0] + cw and self.pixelCoords if p[1][1] < self.topLeftOfImage[1] and p[1][1] > self.topLeftOfImage[1] - ch]
+        #print("setting up visible points took", time.time() * 1000 - start)
+        #print("no of visible points would be", len(visiblePoints))
+        #resolution = int(len(visiblePoints)/2000)
+        #if resolution < 1:
+            #resolution = 1
         temp = []
         start = time.time() * 1000
-        print("res is",resolution)
+        #print("res is",resolution)
 
         ####
         ### calculate the new x and y values for all points
         ###
         for point in self.pixelCoords:
-            x, y = point[1]
+            x, y = point
             x -= self.topLeftOfImage[0]
             y = self.topLeftOfImage[1] - y
             x = (x * self.mapScale)
             y = (y * self.mapScale)
-            temp.append((x,y))
-        print("calcs took",time.time()*1000-start)
+            temp.append(x)
+            temp.append(y)
+        self.largeCirclesVertexList.vertices = temp
+        self.smallCirclesVertexList.vertices = list(temp)
+        self.linesVertexList.vertices = list(temp)
+        print("calcs took",time.time()*1000-start,"updated",len(temp)//2,"vertices")
+        return
         pointCount = 0
         for count,pointIndex in enumerate(visiblePoints):
             if count % resolution == 0:
