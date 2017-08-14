@@ -17,7 +17,8 @@ import os
 import dragandzoomcanvas
 import mapmanager2
 import pandas as pd
-
+import mapViewer
+import pickle
 
 
 class mainWindow(tkinter.Tk):
@@ -210,14 +211,17 @@ class mainWindow(tkinter.Tk):
         ###
         ### set up the full track treeview
         ###
-        scroll = tkinter.Scrollbar(self.trackFrame)
-        tree = ttk.Treeview(self.trackFrame,columns=[0,1,2,3,4], show="headings", height=45,yscrollcommand=scroll.set)
+
+        tree = ttk.Treeview(self.trackFrame,columns=[0,1,2,3,4], show="headings", height=45)
+        scroll = tkinter.Scrollbar(self.trackFrame, orient="vertical", command=tree.yview)
         for index,heading in enumerate([("Index",40),("Track",60),("Lat",80),("Lon",80),("Time",120)]):
             tree.column(index,width = heading[1])
             tree.heading(index,text = heading[0])
         tree.grid(row=0,column=0)
-        scroll.config(command=tree.yview)
         scroll.grid(row=0, column=1, sticky="ns")
+        scroll.config(command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+
         values = df[["Record","Track","Lat","Lon","Time"]].values.tolist()
         print("values",values[:25])
         for index,val in enumerate(values):
@@ -248,7 +252,7 @@ class mainWindow(tkinter.Tk):
         ###
         ### Failed runs frame
         ###
-        scroll2 = tkinter.Scrollbar(self.trackFrame)
+        scroll2 = tkinter.Scrollbar(self.failedRunsFrame)
         tree = ttk.Treeview(self.failedRunsFrame,columns=[0,1,2], show="headings", height=20,yscrollcommand=scroll2.set)
         for index,heading in enumerate([("Start",40),("End",40),("Timing Point",80)]):
             tree.column(index,width = heading[1])
@@ -262,9 +266,13 @@ class mainWindow(tkinter.Tk):
         for item in self.baseData[self.direction.get()][3]:
             tree.insert("","end",values = item)
 
-
+        with open("coords.pkl","wb") as f:
+            pickle.dump(coords,f)
         self.direction_changed()
-        self.dragandzoomcanvas.redraw_canvas()
+        #self.dragandzoomcanvas.redraw_canvas()
+        #self.mapViewer = mapViewer.MapViewer(800,800)
+        #self.mapViewer.set_coords(coords)
+
 
     def failed_runs_clicked(self,event):
         widget = event.widget
@@ -295,7 +303,7 @@ class mainWindow(tkinter.Tk):
         ###
         ### set up failed runs tree
         ###
-        tree = self.failedRunsFrame.winfo_children()[0]
+        tree = self.failedRunsFrame.winfo_children()[1]
         tree.delete(*tree.get_children())
         for item in self.baseData[self.direction.get()][3]:
             tree.insert("","end",values = item)
@@ -362,7 +370,7 @@ class mainWindow(tkinter.Tk):
 
     def receive_notification_of_point_click(self,index):
         print("received notification of change of point to",index)
-        tree = self.trackFrame.winfo_children()[1]
+        tree = self.trackFrame.winfo_children()[0]
         tree.selection_set(index)
         tree.see(tree.selection())
         self.trackTabs.select(1)
@@ -533,6 +541,8 @@ class mainWindow(tkinter.Tk):
         threading.Thread(target=self.export,args=(file,)).start()
 
     def export(self,file):
+        self.dump_raw_data()
+        return
         if file == "":
             messagebox.showinfo(message="no file name entered, exiting Export")
             self.stopProgress()
@@ -586,6 +596,7 @@ class mainWindow(tkinter.Tk):
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[1]]
             self.save_track_as_image(self.secondaryTrackList, direction="s")
             self.export_to_excel(self.secondaryTrees, TPs, self.secondaryTrackList,file + " " + secondaryDirection)
+
         self.stopProgress()
 
     def export_to_excel(self,trees,timingPoints,trackList,filename):
@@ -1866,7 +1877,10 @@ class mainWindow(tkinter.Tk):
                 data["Time"] = data["Time"] + datetime.timedelta(hours=1)
             data["accel"] = (data["legSpeed"] - data["legSpeed"].shift(1))/data["legTime"]
             data[["Time","Lat","Lon","legTime","legDist","legSpeed","accel"]].to_excel(writer,"track " + str(index))
-        writer.save()
+        try:
+            writer.save()
+        except Exception as e:
+            print("couldnt save primary",e)
         writer = pd.ExcelWriter("raw data secondary.xlsx")
         for index,track in enumerate(self.secondaryTrackList):
             data = self.getTrack(track)

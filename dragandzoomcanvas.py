@@ -17,6 +17,7 @@ class DragAndZoomCanvas(tkinter.Canvas):
         self.pixelCoords = []
         self.timingPoints = []
         self.currentPosition = 0
+
         self.bind("<Button-1>", self.map_clicked)
         self.bind("<MouseWheel>", self.on_mousewheel)
         self.mapScale = 1
@@ -116,7 +117,20 @@ class DragAndZoomCanvas(tkinter.Canvas):
         extraTags = []
         print("resolution is",resolution,"no of points is",len(self.pixelCoords),"no of visible points is",int(len(self.pixelCoords)/resolution))
         visiblePoints = [(index,p) for index,p in enumerate(self.pixelCoords) if p[0] >= self.topLeftOfImage[0] - (2*cw) and p[0] <= self.topLeftOfImage[0] + 2*cw and p[1] >= self.topLeftOfImage[1]- (2*cw) and p[1] <= self.topLeftOfImage[1] + 2*cw ]
+        temp = []
+        print("res is", resolution)
 
+        ####
+        ### calculate the new x and y values for all points
+        ###
+        for point in self.pixelCoords:
+            x, y = point
+            x -= self.topLeftOfImage[0]
+            y -= self.topLeftOfImage[1]
+            x = (x * self.mapScale)
+            y = (y * self.mapScale)
+            temp.append((x, y))
+        pointCount = 0
         if len(visiblePoints) < 10000 or resolution < 1:
             resolution = 1
         else:
@@ -130,18 +144,10 @@ class DragAndZoomCanvas(tkinter.Canvas):
                 if previousPointIndex <0 :
                     previousPointIndex = 0
                 #print("index of drawn point is",p,"previously drawn point iS",visiblePoints[previousPointIndex])
-                x, y = p[1]
-                x -= self.topLeftOfImage[0]
-                y -= self.topLeftOfImage[1]
-                x = (x * self.mapScale)
-                y = (y * self.mapScale)
+                x, y = temp[p[0]]
                 tags = ["point_" + str(p[0])] + extraTags
                 if previousPointIndex >=0:
-                    x1,y1 = self.pixelCoords[previousPointIndex]
-                    x1 -= self.topLeftOfImage[0]
-                    y1 -= self.topLeftOfImage[1]
-                    x1 = (x1 * self.mapScale)
-                    y1 = (y1 * self.mapScale)
+                    x1,y1 = temp[previousPointIndex]
                     self.create_line(x, y, x1, y1, fill=col, width=8,tags = extraTags)
                     if self.mapScale > 500:
                         midpoint = ((x1+x)/2,(y1+y)/2)
@@ -198,7 +204,7 @@ class DragAndZoomCanvas(tkinter.Canvas):
                     self.create_oval([x1 - 5, y1 - 5, x1 + 5, y1 + 5], fill="white", width=0, tags=tags)
                 self.create_oval([x - 8, y - 8, x + 8, y + 8], fill=col, width=0, tags=tags)
                 self.create_oval([x - 5, y - 5, x + 5, y + 5], fill="white", width=0, tags=tags)
-
+                #print("displaying",p,x,y)
         ###
         ### draw the currently selected point
         ###
