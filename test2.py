@@ -28,6 +28,67 @@ import copy
 import time
 import os
 
+class Route():
+
+    ###
+    ### this class holds the data for a route
+    ### timing points, name, direction, and the thumbnail map
+
+    def __init__(self,name,dir):
+        self.name = name
+        self.dir = [dir]
+        self.timingPoints = []
+        self.tracks =[]
+        self.mapImage = None
+        self.mapManager = None
+
+    def setMapManager(self,mapMan):
+        self.mapManager=mapMan
+
+    def update_zoom(self,val):
+        self.mapImage = self.mapManager.change_zoom(val)
+
+    def getMapManager(self):
+        return self.mapManager
+
+    def add_timing_point(self,lat,long,dir,ID):
+        print("adding timing point to route",self.name,"id is",ID,"type of id is ",type(ID))
+        self.timingPoints.append((int(ID),dir,float(lat),float(long)))
+        self.timingPoints = sorted(self.timingPoints, key=operator.itemgetter(1, 0))
+        if not dir in self.dir:
+            self.dir.append(dir)
+
+    def add_map(self,image):
+        self.mapImage = image
+        #self.mapImage.show()
+
+    def get_map(self):
+        print("size of map",self.mapImage.size)
+        return self.mapImage
+
+    def add_track(self,track):
+        self.tracks.append(track)
+
+    def get_timing_points(self):
+        TPs = []
+        #print(self.dir)
+        for d in self.dir:
+            l = [tp for tp in self.timingPoints if tp[1] == d]
+            l =sorted(l,key=lambda x: x[0])
+            TPs.append(l)
+        if len(self.dir) == 1:
+            reverse = list(reversed(TPs[0]))
+            TPs.append(reverse)
+        print("returning sorted timing points",TPs)
+        return TPs
+
+    def display(self):
+        #print(self.name)
+        print("---------------------------")
+        for tp in self.timingPoints:
+            print(tp[0],tp[1]," : ",tp[2],tp[3])
+
+
 try:
   from lxml import etree
   print("running with lxml.etree")
@@ -54,73 +115,86 @@ except ImportError:
         except ImportError:
           print("Failed to import ElementTree from any known place")
 
-def mouseClick(event):
-    global x,y
-    x = event.x
-    y= event.y
+def kml(file,index):
+    result = []
+    routes = {}
+    dir = "C:\\user\\nwatson\\desktop\\"
+    #file = filedialog.askopenfilename(initialdir=dir)
+    if file == "":
+        return
+    if file[-4:] == ".kml":
+        tree = etree.parse(file)
+        root = tree.getroot()
+        #"root",root.tag)
+        #for child in root:
+            #print(child.tag,child.attrib)
+        doc = root.find("{http://www.opengis.net/kml/2.2}Document")
+        if doc is None:
+            return
+        if doc.find("{http://www.opengis.net/kml/2.2}Folder") is None:
+            #print("assigning doc")
+            iter = root.iter("{http://www.opengis.net/kml/2.2}Document")
+        else:
+            #print("assigning folder")
+            iter = doc.iter("{http://www.opengis.net/kml/2.2}Folder")
+        t = []
+        for item in iter:
+            tps = []
 
-def mouseMove(event):
-    global x, y,item
-    print(event.x-x,event.y-y)
-    canvas.move(item,event.x-x,event.y-y)
-    x = event.x
-    y = event.y
+            for track in item.iter("{http://www.google.com/kml/ext/2.2}Track"):
+                times = [when.text for when in track.iter("{http://www.opengis.net/kml/2.2}when")]
+                points = [gx.text.split(" ") for gx in track.iter("{http://www.google.com/kml/ext/2.2}coord")]
+                t = list(zip(times,points))
+                print(t)
+        for i,point in enumerate(t):
+            result.append((point[0],i,point[1][1],point[1][0]))
+    df = pd.DataFrame(result, columns=["Date", "Record", "Lat", "Lon"])
+    df["Track"] = "Track " + str(index)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df.replace(np.inf, np.nan, inplace=True)  ## because for some reason, last row speed is calculated as inf
+    df = df.dropna()
+    print(df.head())
+    return df
 
-def rollWheel(event):
-  global canvas, zoom,mapImage,baseImage,centre,item
-  print("event",event.num,event.delta,event)
-  if event.delta==120:
-    zoom += 100
-  elif event.delta==-120:
-    zoom-=100
-  img = baseImage.resize((zoom,zoom),Image.ANTIALIAS)
-  #baseImage.show()
-  mapImage = ImageTk.PhotoImage(img)
-  canvas.delete(tkinter.ALL)
-  item = canvas.create_image(0, 0, image=mapImage, anchor=tkinter.NW)
-  x,y=mapMan.get_coords(centre,zoom)
-  canvas.create_oval([x - 5, y - 5, x + 5, y + 5], fill="red",width=0)
-  print("zoom is",zoom)
-
-
-
-f = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/test p.xlsm"
-f1 = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/test p.xls"
-t = "S:/SCOTLAND DRIVE 2/JOB FOLDERS/4 - Midlands/3174-MID Hereford Congestion/frseedrrhjryrud"
-#f1 ="C:/Users/NWatson/PycharmProjects/JourneyTimes/blah" + ".xlsm"
-
-fnt = ImageFont.truetype("arial",size = 15)
-image = Image.open("map.jpg").convert('RGB')
-t = datetime.datetime.strftime(datetime.datetime.now(),"%H:%M:%S")
-fnt = ImageFont.truetype("arial", size=18)
-drawimage = ImageDraw.Draw(image)
-drawimage.rectangle([0,0,100,50],fill="white")
-drawimage.text((10,10),text = t,font=fnt,fill="black")
-image.save("track " + str(1) + ".jpg")
-
-folder = os.path.dirname(os.path.abspath(__file__))
-print(folder)
-folder = os.path.join(folder,"Runs\\")
-print(folder)
-for file in os.listdir(folder):
-    file_path = os.path.join(folder,file)
-    try:
-        if os.path.isfile(file_path):
-            os.unlink(file_path)
-    except Exception as e:
-        print(e)
+import pyglet
 
 
+
+
+window = pyglet.window.Window()
+
+
+
+@window.event
+def on_draw():
+    window.clear()
+    label.draw()
+pyglet.app.run()
 exit()
-win = tkinter.Tk()
-canvas = tkinter.Canvas(win)
-canvas.pack()
-image = Image.open("map.jpg").convert('RGB')
-image1 = ImageTk.PhotoImage(image)
-drawimage = ImageDraw.Draw(image)
-canvas.create_image(0, 0, image = image1, anchor = tkinter.NW)
-canvas.create_line(100,100,200,200,width=4)
-drawimage.line([100,100,200,200])
-drawimage.text((0,0),text="wertoweirtjeroteto",fill="black")
-image.save("Runs/poo.jpg")
-win.mainloop()
+
+file = filedialog.askdirectory()
+basedir = "Z:/SCOTLAND DRIVE 2/Analysis Department/R&D/neil/TfL - Folder Structure/DP0"
+for i in range(2,26):
+    topDir = basedir + '{0:02d}'.format(int(i))
+    folderNumber = '{0:02d}'.format(int(i))
+    print(topDir)
+    if not os.path.exists(topDir):
+        os.makedirs(topDir)
+    for path,dirs,files in os.walk(file):
+        path = path.replace("\\","/")
+        splitpath = path.split("/")
+
+        splitpath = [folderNumber + item[2:] for item in splitpath[7:]]
+        print("splitpath is", splitpath)
+        #print(path, dirs)
+        dirs = [folderNumber + dir[2:] for dir in dirs]
+        print(path, dirs)
+        targetDir = os.path.join(topDir,*splitpath)
+        print("targetdir is",targetDir)
+        for dir in dirs:
+            if not os.path.exists(targetDir + "/" + dir):
+                os.makedirs(targetDir + "/" + dir)
+
+
+
+

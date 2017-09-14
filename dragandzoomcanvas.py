@@ -115,10 +115,10 @@ class DragAndZoomCanvas(tkinter.Canvas):
         col = "grey40"
         pointCount=0
         extraTags = []
-        print("resolution is",resolution,"no of points is",len(self.pixelCoords),"no of visible points is",int(len(self.pixelCoords)/resolution))
+        #print("resolution is",resolution,"no of points is",len(self.pixelCoords),"no of visible points is",int(len(self.pixelCoords)/resolution))
         visiblePoints = [(index,p) for index,p in enumerate(self.pixelCoords) if p[0] >= self.topLeftOfImage[0] - (2*cw) and p[0] <= self.topLeftOfImage[0] + 2*cw and p[1] >= self.topLeftOfImage[1]- (2*cw) and p[1] <= self.topLeftOfImage[1] + 2*cw ]
         temp = []
-        print("res is", resolution)
+        #print("res is", resolution)
 
         ####
         ### calculate the new x and y values for all points
@@ -135,7 +135,7 @@ class DragAndZoomCanvas(tkinter.Canvas):
             resolution = 1
         else:
             resolution = int(len(visiblePoints) / 1500)
-        print("no of visible points is", len(visiblePoints),"resolution is",resolution)
+        #print("no of visible points is", len(visiblePoints),"resolution is",resolution)
         for index,p in enumerate(visiblePoints):
             if index%resolution == 0: ### we only want to display a few points if the resolution is "high"
                 pointCount+=1
@@ -232,7 +232,7 @@ class DragAndZoomCanvas(tkinter.Canvas):
         ###
         ### display the timing points
         ###
-        print("timing poitns to display is",self.timingPointsToDisplay)
+        #print("timing poitns to display is",self.timingPointsToDisplay)
         if self.timingPointsToDisplay == 0:
             tpList = [(self.timingPoints[0],0)]
         else:
@@ -258,9 +258,10 @@ class DragAndZoomCanvas(tkinter.Canvas):
                     ###
                     dx = (self.pixelToMilesRatio * self.currentClosenessThreshold)/cw * self.width
                     dy = (self.pixelToMilesRatio * self.currentClosenessThreshold)/ch * self.height
+                    #print("radius at zoom level of", self.mapScale, "is", dx, dy)
                     self.create_oval(x-dx,y-dy,x+dx,y+dy,fill = "",outline="gold",width = 3,tags=[str(direction) + "_timingpoint_" + str(index),])
 
-        print("no of points drawn",pointCount)
+        #print("no of points drawn",pointCount)
 
     def add_timing_point(self,x,y):
         iw, ih = self.width, self.height

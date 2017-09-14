@@ -187,15 +187,16 @@ class mainWindow(tkinter.Tk):
         routeName = self.routeListBox.get(self.routeListBox.curselection())
         route = self.routes[routeName]
         coords = [mapmanager2.get_coords(self.centrePoint, p, 10,size=800) for p in coords]
+        tps = [mapmanager2.get_coords(self.centrePoint, p, 10,size=800) for p in [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[0]]]
         win = tkinter.Toplevel()
         win.protocol("WM_DELETE_WINDOW", lambda w = win:self.full_track_view_closed(w))
-        self.dragandzoomcanvas = dragandzoomcanvas.DragAndZoomCanvas(win, 1500, 1000)
-        self.dragandzoomcanvas.pack(side=tkinter.LEFT)
-        self.dragandzoomcanvas.set_coords(coords)
-        self.dragandzoomcanvas.set_centre_point(self.centrePoint)
-        self.dragandzoomcanvas.set_route(route)
-        self.dragandzoomcanvas.set_callback_function("notify change of point",self.receive_notification_of_point_click)
-        self.dragandzoomcanvas.set_callback_function("notify added timing point", self.receive_notification_of_timing_point_added)
+        #self.dragandzoomcanvas = dragandzoomcanvas.DragAndZoomCanvas(win, 1500, 1000)
+        #self.dragandzoomcanvas.pack(side=tkinter.LEFT)
+        #self.dragandzoomcanvas.set_coords(coords)
+        #self.dragandzoomcanvas.set_centre_point(self.centrePoint)
+        #self.dragandzoomcanvas.set_route(route)
+        #self.dragandzoomcanvas.set_callback_function("notify change of point",self.receive_notification_of_point_click)
+        #self.dragandzoomcanvas.set_callback_function("notify added timing point", self.receive_notification_of_timing_point_added)
 
         frame = tkinter.Frame(win, bg="white")
         self.trackTabs = ttk.Notebook(frame)
@@ -233,6 +234,7 @@ class mainWindow(tkinter.Tk):
         ###
         ### timing points frame
         ###
+
         tree = ttk.Treeview(self.timingPointsFrame, columns=[0, 1, 2],show="headings")
         for index, heading in enumerate([("Index",45), ("Lat",85), ("Lon",85)]):
             tree.column(index, width=heading[1])
@@ -268,11 +270,21 @@ class mainWindow(tkinter.Tk):
 
         with open("coords.pkl","wb") as f:
             pickle.dump(coords,f)
-        self.direction_changed()
-        #self.dragandzoomcanvas.redraw_canvas()
-        #self.mapViewer = mapViewer.MapViewer(800,800)
-        #self.mapViewer.set_coords(coords)
 
+        #self.dragandzoomcanvas.redraw_canvas()
+        self.mapViewer = mapViewer.MapViewer(1500,1000)
+        self.mapViewer.set_centre_point(self.centrePoint)
+        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        route = self.routes[routeName]
+        self.mapViewer.set_route(route)
+        self.mapViewer.set_coords(coords)
+        self.direction_changed()
+        self.update_map_viewer()
+
+
+    def update_map_viewer(self):
+        self.mapViewer.update()
+        self.after(10,self.update_map_viewer)
 
     def failed_runs_clicked(self,event):
         widget = event.widget
@@ -308,7 +320,7 @@ class mainWindow(tkinter.Tk):
         for item in self.baseData[self.direction.get()][3]:
             tree.insert("","end",values = item)
 
-        self.dragandzoomcanvas.set_timing_points_to_display(self.direction.get())
+        self.mapViewer.set_timing_points_to_display(self.direction.get())
 
     def view_timing_point(self,event,index=None):
         if not event  is None:
@@ -316,9 +328,10 @@ class mainWindow(tkinter.Tk):
             print(curItem)
             print(event.widget.selection())
             if curItem != "":
-                self.dragandzoomcanvas.view_timing_point(int(curItem)-1)
+                self.mapViewer.view_timing_point(int(curItem)-1)
         if not index is None:
-            self.dragandzoomcanvas.view_timing_point(index-1)
+            self.mapViewer.view_timing_point(index-1)
+
 
     def activate_add_timing_point(self):
         if self.addTimingPointFlag == False:
@@ -356,6 +369,7 @@ class mainWindow(tkinter.Tk):
         self.direction_changed()
 
     def view_gps_point(self,event,index=None):
+        start = time.time() * 1000
         if not event is None:
             selection = event.widget.selection()[0]
             event.widget.focus(selection)
@@ -363,9 +377,12 @@ class mainWindow(tkinter.Tk):
             if selection != "":
                 if selection == 'I001':
                     selection = "1"
-                self.dragandzoomcanvas.view_gps_point(int(selection)-1,redraw=True)
+                #self.dragandzoomcanvas.view_gps_point(int(selection)-1,redraw=True)
+                self.mapViewer.view_gps_point(int(selection)-1, redraw=True)
         if not index is None:
-            self.dragandzoomcanvas.view_gps_point(index, redraw=True)
+            #self.dragandzoomcanvas.view_gps_point(index, redraw=True)
+            self.mapViewer.view_gps_point(index,redraw=True)
+        print("viewing gps point took",time.time()*1000-start)
         return "break"
 
     def receive_notification_of_point_click(self,index):
@@ -541,8 +558,8 @@ class mainWindow(tkinter.Tk):
         threading.Thread(target=self.export,args=(file,)).start()
 
     def export(self,file):
-        self.dump_raw_data()
-        return
+        #self.dump_raw_data()
+        #return
         if file == "":
             messagebox.showinfo(message="no file name entered, exiting Export")
             self.stopProgress()

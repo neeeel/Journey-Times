@@ -227,8 +227,8 @@ def load_csv(file,index):
         ###
         ### convert the gps data into WSG 84
         ###
-        df.Lat =df.Lat.apply(ut.latTOdddd)
-        df.Lon = df.Lon.apply(ut.lonTOdddd)
+        #df.Lat =df.Lat.apply(ut.latTOdddd)
+        #df.Lon = df.Lon.apply(ut.lonTOdddd)
         df["Track"] = "Track " + str(index)
         #df.to_csv("dumped.csv")
     except PermissionError as e:
@@ -975,8 +975,8 @@ def parse_gsd(row):
 
 
 
-file = "C:/Users/NWatson/Desktop/3360-WAL Bridgewater JT/Journey Time Routes/Route 1(2).gsd"
-#load_gsd(file)
+#file = "C:/Users/NWatson/Desktop/20170516065147.csv"
+##load_csv(file,1)
 #exit()
 
 #print(df.head())
