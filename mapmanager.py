@@ -18,13 +18,11 @@ class MapManager():
         self.zoomValues = list(reversed(self.zoomValues))
         self.map_height = map_height
         self.map_width = map_width
-        self.zoom = self.calculateZoomValue(tps)
+        self.zoom = self.calculateZoomValue(tps[0])
         self.tps = tps
-        self.center_lat,self.center_lon = self.get_centre_of_points(tps)
-        #print(self.center_lat,self.center_lon)
-        #self.center_lon = coords[1]
-
+        self.center_lat,self.center_lon = self.get_centre_of_points(tps[0])
         self.static_map = self.load_map(self.center_lat, self.center_lon)
+        self.center_lat, self.center_lon = self.get_centre_of_points(tps[1])
         self.static_map_sec = self.load_map(self.center_lat, self.center_lon,direction="s")
         self.plotted_points = []
 
@@ -113,12 +111,14 @@ class MapManager():
         step = int(len(path) / 150) + 1
         noOfPoints = len(path) * 12
         #print("tps are ",tps)
+        #tps = list(reversed(tps))
+        #tps[0] = (51.9176507,-8.3994234)
         markers = ""
         pathString = "&path="
-        markers += "&markers=color:green%7Clabel:A%7C" + str(self.tps[0][0]) + "," + str(self.tps[0][1])
-        for i, tp in enumerate(self.tps[1:-1]):
+        markers += "&markers=color:green%7Clabel:A%7C" + str(tps[0][0]) + "," + str(tps[0][1])
+        for i, tp in enumerate(tps[1:-1]):
             markers += "&markers=color:blue%7Clabel:" + chr(i + 1 + base) + "%7C" + str(tp[0]) + "," + str(tp[1])
-        markers += "&markers=color:Red%7Clabel:" + chr(len(self.tps) - 1 + base) + "%7C" + str(self.tps[-1][0]) + "," + str(self.tps[-1][1])
+        markers += "&markers=color:Red%7Clabel:" + chr(len(tps) - 1 + base) + "%7C" + str(tps[-1][0]) + "," + str(tps[-1][1])
         for p in path[::step]:
             pathString+= str(p[0]) + "," + str(p[1]) + "%7C"
         pathString += str(path[-1][0]) + "," + str(path[-1][1])
@@ -136,10 +136,10 @@ class MapManager():
         markers = ""
         base = 65
         if direction=="p":
-            timingPoints = self.tps
+            timingPoints = self.tps[0]
         else:
             print("secondary map")
-            timingPoints = list(reversed(self.tps))
+            timingPoints = self.tps[1]
 
         markers += "&markers=color:green%7Clabel:A%7C" + str(timingPoints[0][0]) + "," + str(timingPoints[0][1])
         for i, tp in enumerate(timingPoints[1:-1]):
@@ -160,13 +160,15 @@ class MapManager():
             image.save("sec_map.jpg")
         return image
 
-    def get_thumbnail(self):
+    def get_thumbnails(self):
         if self.static_map is None:
-            return
+            return [None,None]
         image = Image.open("map.jpg")
+        image2 = Image.open("sec_map.jpg")
         val = 800
         image = image.resize((val, val), Image.ANTIALIAS)
-        return image
+        image2 = image2.resize((val, val), Image.ANTIALIAS)
+        return [image,image2]
 
     def _window_x_y_to_grid(self, x, y):
         '''

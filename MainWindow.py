@@ -32,6 +32,7 @@ class mainWindow(tkinter.Tk):
         self.selectedRoute = None
         self.progress = None
         self.trackData = None
+        self.mapViewer = None
         self.unitsVar = tkinter.IntVar()
         self.q = queue.Queue()
         self.discardedRuns = []
@@ -160,8 +161,7 @@ class mainWindow(tkinter.Tk):
         innerFrame2 = tkinter.Frame(canvas2, bg="white")
         canvas2.create_window((0, 0), window=innerFrame2, anchor="nw")
 
-
-        self.bind_all("<<NotebookTabChanged>>", self.tabChanged)
+        self.tabs.bind("<<NotebookTabChanged>>", self.tabChanged)
 
 
 
@@ -184,19 +184,9 @@ class mainWindow(tkinter.Tk):
         coords = df[["Lat","Lon"]].values.tolist()
         self.centrePoint = coords[0]
         self.routeListBox.config(state=tkinter.DISABLED)
-        routeName = self.routeListBox.get(self.routeListBox.curselection())
-        route = self.routes[routeName]
         coords = [mapmanager2.get_coords(self.centrePoint, p, 10,size=800) for p in coords]
-        tps = [mapmanager2.get_coords(self.centrePoint, p, 10,size=800) for p in [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[0]]]
         win = tkinter.Toplevel()
         win.protocol("WM_DELETE_WINDOW", lambda w = win:self.full_track_view_closed(w))
-        #self.dragandzoomcanvas = dragandzoomcanvas.DragAndZoomCanvas(win, 1500, 1000)
-        #self.dragandzoomcanvas.pack(side=tkinter.LEFT)
-        #self.dragandzoomcanvas.set_coords(coords)
-        #self.dragandzoomcanvas.set_centre_point(self.centrePoint)
-        #self.dragandzoomcanvas.set_route(route)
-        #self.dragandzoomcanvas.set_callback_function("notify change of point",self.receive_notification_of_point_click)
-        #self.dragandzoomcanvas.set_callback_function("notify added timing point", self.receive_notification_of_timing_point_added)
 
         frame = tkinter.Frame(win, bg="white")
         self.trackTabs = ttk.Notebook(frame)
@@ -214,14 +204,13 @@ class mainWindow(tkinter.Tk):
         ###
 
         tree = ttk.Treeview(self.trackFrame,columns=[0,1,2,3,4], show="headings", height=45)
-        scroll = tkinter.Scrollbar(self.trackFrame, orient="vertical", command=tree.yview)
+        #scroll = tkinter.Scrollbar(self.trackFrame, orient="vertical", command=tree.yview)
+        self.scale = ttk.Scale(self.trackFrame,orient="vertical",command = self.scroll_with_scale,from_=0,to=len(df)-1)
+        self.scale.grid(row=0,column=1,sticky="ns")
         for index,heading in enumerate([("Index",40),("Track",60),("Lat",80),("Lon",80),("Time",120)]):
             tree.column(index,width = heading[1])
             tree.heading(index,text = heading[0])
         tree.grid(row=0,column=0)
-        scroll.grid(row=0, column=1, sticky="ns")
-        scroll.config(command=tree.yview)
-        tree.configure(yscrollcommand=scroll.set)
 
         values = df[["Record","Track","Lat","Lon","Time"]].values.tolist()
         print("values",values[:25])
@@ -229,27 +218,29 @@ class mainWindow(tkinter.Tk):
             tree.insert("", "end", iid=str(index), values=val)
         tree.bind("<<TreeviewSelect>>", self.view_gps_point)
 
-
-
         ###
         ### timing points frame
         ###
 
         tree = ttk.Treeview(self.timingPointsFrame, columns=[0, 1, 2],show="headings")
-        for index, heading in enumerate([("Index",45), ("Lat",85), ("Lon",85)]):
+        for index, heading in enumerate([("Index",45), ("Lat",110), ("Lon",110)]):
             tree.column(index, width=heading[1])
             tree.heading(index, text=heading[0])
-        tree.grid(row=0, column=0)
+        tree.grid(row=0, column=0,columnspan=4)
         tree.bind("<Button-1>", self.view_timing_point)
 
         self.direction = tkinter.IntVar()
         self.direction.set(0)
 
-        tkinter.Radiobutton(self.timingPointsFrame,text = "Primary",variable=self.direction,value = 0, command=self.direction_changed,bg="white").grid(row=1,column=0)
-        tkinter.Radiobutton(self.timingPointsFrame, text="Secondary", variable=self.direction,value =1, command=self.direction_changed,bg="white").grid(row=2, column=0)
-        tkinter.Button(self.timingPointsFrame,text="Add",command=self.activate_add_timing_point,width = 7).grid(row=3,column=0)
-        tkinter.Button(self.timingPointsFrame, text="Delete", command=self.delete_timing_point,width = 7).grid(row=4, column=0)
-        tkinter.Button(self.timingPointsFrame, text="Save", command=self.save_timing_points,width = 7).grid(row=5, column=0)
+        tkinter.Radiobutton(self.timingPointsFrame,text = "Primary",variable=self.direction,value = 0, command=self.direction_changed,bg="white").grid(row=1,column=0,columnspan=3)
+        tkinter.Radiobutton(self.timingPointsFrame, text="Secondary", variable=self.direction,value =1, command=self.direction_changed,bg="white").grid(row=2, column=0,columnspan=3)
+        tkinter.Label(self.timingPointsFrame,text ="Enter TP No.",bg="white",anchor=tkinter.E).grid(row=3,column=0,sticky="nsew")
+        tkinter.Entry(self.timingPointsFrame,state="disabled",width = 5).grid(row=3,column=1,sticky="nsew")
+        tkinter.Button(self.timingPointsFrame,state="disabled",text="save",bg="white").grid(row=3,column=2,sticky="nsew")
+        #tkinter.Button(self.timingPointsFrame, state="disabled", text="cancel").grid(row=3, column=3)
+        tkinter.Button(self.timingPointsFrame,text="Add",command=self.activate_add_timing_point,width = 7).grid(row=4,column=0,columnspan=3)
+        tkinter.Button(self.timingPointsFrame, text="Delete", command=self.delete_timing_point,width = 7).grid(row=5, column=0,columnspan=3)
+        tkinter.Button(self.timingPointsFrame, text="Save", command=self.save_timing_points,width = 7).grid(row=6, column=0,columnspan=3)
 
         ###
         ### Failed runs frame
@@ -267,24 +258,67 @@ class mainWindow(tkinter.Tk):
         tkinter.Radiobutton(self.failedRunsFrame, text="Secondary", variable=self.direction,value =1, command=self.direction_changed,bg="white").grid(row=2, column=0)
         for item in self.baseData[self.direction.get()][3]:
             tree.insert("","end",values = item)
+        print(win.winfo_reqwidth(),win.winfo_reqheight())
+        win.geometry('420x1000+0+0')
+        win.update()
 
-        with open("coords.pkl","wb") as f:
-            pickle.dump(coords,f)
-
-        #self.dragandzoomcanvas.redraw_canvas()
-        self.mapViewer = mapViewer.MapViewer(1500,1000)
+        screen_width = self.winfo_screenwidth()
+        left = screen_width - 1500
+        self.mapViewer = mapViewer.MapViewer(1500,1000,left)
         self.mapViewer.set_centre_point(self.centrePoint)
-        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
         route = self.routes[routeName]
-        self.mapViewer.set_route(route)
+
         self.mapViewer.set_coords(coords)
+        self.mapViewer.set_route(route)
+        self.mapViewer.set_callback_function("notify change of point",self.receive_notification_of_point_click)
+        self.mapViewer.set_callback_function("notify added timing point", self.receive_notification_of_timing_point_added)
+        self.mapViewer.set_callback_function("notify window closed", self.receive_notification_track_window_closed)
         self.direction_changed()
         self.update_map_viewer()
 
+    def scroll_with_scale(self,event):
+        print("scroll value is",event)
+        tree = self.trackFrame.winfo_children()[0]
+        tree.see(int(float(event)))
+        #print("value of slider is",event.widget.get())
 
     def update_map_viewer(self):
-        self.mapViewer.update()
-        self.after(10,self.update_map_viewer)
+        if not self.mapViewer is None:
+            self.mapViewer.update()
+            self.after(10,self.update_map_viewer)
+
+    def runProcess(self, event):
+        for tree in self.primaryTrees:
+            tree.forget()
+            tree.destroy()
+        for tree in self.secondaryTrees:
+            tree.forget()
+            tree.destroy()
+        self.primaryTrees = []
+        self.secondaryTrees = []
+        self.primaryTrackList = []
+        self.secondaryTrackList = []
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
+        self.routeListBox.activate(self.routeListBox.curselection())
+        if self.routes[routeName].changed:
+            ###
+            ### reload the route maps if the TPS have been edited
+            ###
+            self.routes[routeName].changed = False
+            self.load_route_maps(self.routes[routeName])
+        fileList = list(filedialog.askopenfilenames(initialdir=dir))
+        if not routeName in self.routes or fileList == []:
+            self.mapLabel.configure(text="Map")
+            self.journeyLabel.configure(text="Journey Time Summary")
+            return
+
+        self.selectedRoute = self.routes[routeName]
+        threading.Thread(target=wrapper_function, args=(self.fun, self.routes[routeName], fileList)).start()
+        self.startProgress("Loading and Processing Data")
+        self.mapLabel.configure(text="Map - " + routeName)
+        self.journeyLabel.configure(text="Journey Time Summary - " + routeName)
+        return
 
     def failed_runs_clicked(self,event):
         widget = event.widget
@@ -301,11 +335,13 @@ class mainWindow(tkinter.Tk):
 
     def full_track_view_closed(self,win):
         self.routeListBox.config(state=tkinter.NORMAL)
+        if not self.mapViewer is None:
+            self.mapViewer.on_close()
         win.destroy()
 
     def direction_changed(self):
         print("direction is",self.direction.get())
-        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
         tps = self.routes[routeName].get_timing_points()
         tree = self.timingPointsFrame.winfo_children()[0]
         tree.delete(*tree.get_children())
@@ -319,7 +355,6 @@ class mainWindow(tkinter.Tk):
         tree.delete(*tree.get_children())
         for item in self.baseData[self.direction.get()][3]:
             tree.insert("","end",values = item)
-
         self.mapViewer.set_timing_points_to_display(self.direction.get())
 
     def view_timing_point(self,event,index=None):
@@ -332,17 +367,16 @@ class mainWindow(tkinter.Tk):
         if not index is None:
             self.mapViewer.view_timing_point(index-1)
 
-
     def activate_add_timing_point(self):
         if self.addTimingPointFlag == False:
             self.addTimingPointFlag = True
-            print("colour of button is",self.timingPointsFrame.winfo_children()[3].cget("bg"))
-            self.timingPointsFrame.winfo_children()[3].config(bg="green")
-            self.dragandzoomcanvas.set_cursor("cross")
+            print("colour of button is",self.timingPointsFrame.winfo_children()[6].cget("bg"))
+            self.timingPointsFrame.winfo_children()[6].config(bg="green")
+            self.mapViewer.set_cursor("CURSOR_CROSSHAIR")
         else:
             self.addTimingPointFlag = False
-            self.timingPointsFrame.winfo_children()[3].config(bg="SystemButtonFace")
-            self.dragandzoomcanvas.set_cursor("arrow")
+            self.timingPointsFrame.winfo_children()[6].config(bg="SystemButtonFace")
+            self.mapViewer.set_cursor("CURSOR_DEFAULT")
 
     def save_timing_points(self):
         file = filedialog.asksaveasfilename()
@@ -350,7 +384,7 @@ class mainWindow(tkinter.Tk):
             return
         if not ".txt" in file:
             file = file + ".txt"
-        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
         route = self.routes[routeName]
         route.save_timing_points(file)
 
@@ -360,15 +394,14 @@ class mainWindow(tkinter.Tk):
             return
         selection = tree.selection()[0]
         tree.delete(selection)
-        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
         route = self.routes[routeName]
         route.delete_timing_point(self.direction.get(),selection)
-        routeName = self.routeListBox.get(self.routeListBox.curselection())
-        route = self.routes[routeName]
-        self.dragandzoomcanvas.set_route(route)
+        self.mapViewer.set_route(route)
         self.direction_changed()
 
     def view_gps_point(self,event,index=None):
+        print("index is",index,"event is",event)
         start = time.time() * 1000
         if not event is None:
             selection = event.widget.selection()[0]
@@ -377,12 +410,21 @@ class mainWindow(tkinter.Tk):
             if selection != "":
                 if selection == 'I001':
                     selection = "1"
-                #self.dragandzoomcanvas.view_gps_point(int(selection)-1,redraw=True)
-                self.mapViewer.view_gps_point(int(selection)-1, redraw=True)
+                index = int(selection)
         if not index is None:
-            #self.dragandzoomcanvas.view_gps_point(index, redraw=True)
             self.mapViewer.view_gps_point(index,redraw=True)
+        tree = self.trackFrame.winfo_children()[0]
+        scale = self.trackFrame.winfo_children()[1]
+        #tree.selection_set(str(index))
+        #tree.see(str(index))
+        print("here")
+        #tree.update()
+        print("now here")
+        tree.update_idletasks()
+        print("and here")
+        scale.set(index)
         print("viewing gps point took",time.time()*1000-start)
+        print("*"*100)
         return "break"
 
     def receive_notification_of_point_click(self,index):
@@ -393,8 +435,39 @@ class mainWindow(tkinter.Tk):
         self.trackTabs.select(1)
         tree.focus_set()
 
-    def receive_notification_of_timing_point_added(self):
+    def receive_notification_of_timing_point_added(self,data):
+        ###
+        ### receives a list of [newCoords,direction] from mapViewer
+        ### passes them on when the Save button is pressed
+        ###
+        print("received notification of added timing point")
+        self.timingPointsFrame.winfo_children()[4].config(state="normal",bg="red")
+        self.timingPointsFrame.winfo_children()[5].config(state="normal",bg="red",command=lambda c = data:self.save_new_timing_point(c))
+        self.timingPointsFrame.winfo_children()[6].config(state="disabled",bg="SystemButtonFace")
+
+    def save_new_timing_point(self,data):
+        newTPNo = self.timingPointsFrame.winfo_children()[4].get()
+        try:
+            newTPNo = int(newTPNo)
+        except Exception as e:
+            messagebox.showinfo(message="You must enter an integer for the timing point number")
+            return
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
+        route = self.routes[routeName]
+        coords,direction = data
+        route.add_timing_point(coords[0],coords[1],direction,newTPNo,reorder=True)
+        self.timingPointsFrame.winfo_children()[6].config(bg="SystemButtonFace",state="normal")
+        self.timingPointsFrame.winfo_children()[5].config(state="disabled",bg="white")
+        self.timingPointsFrame.winfo_children()[4].config(state="disabled",bg="white")
+        self.mapViewer.set_cursor("CURSOR_DEFAULT")
+        self.addTimingPointFlag = False
+        self.mapViewer.set_route(route)
         self.direction_changed()
+
+    def receive_notification_track_window_closed(self):
+        self.mapViewer = None
+        self.routeListBox.config(state=tkinter.NORMAL)
+
 
     def scroll_data_window(self,event):
         print("event",event,event.widget.get())
@@ -507,7 +580,7 @@ class mainWindow(tkinter.Tk):
         routeName = self.routeListBox.get(self.routeListBox.curselection())
         if routeName in self.routes:
             self.mapLabel.configure(text="Map - " + routeName)
-            self.thumbnail = ImageTk.PhotoImage(self.routes[routeName].get_map())
+            self.thumbnail = ImageTk.PhotoImage(self.routes[routeName].get_primary_map())
             #self.routes[routeName].get_map().show()
             #print("img size is",self.thumbnail.width(),self.thumbnail.height())
             self.thumbnailCanvas.create_image(10, 10, image=self.thumbnail, anchor=tkinter.NW)
@@ -550,6 +623,7 @@ class mainWindow(tkinter.Tk):
 
     def excel_settings_closed(self):
         self.excelWindow.destroy()
+        self.routeListBox.config(state=tkinter.NORMAL)
 
     def start_export(self):
         file = filedialog.asksaveasfilename()
@@ -611,7 +685,7 @@ class mainWindow(tkinter.Tk):
                 except Exception as e:
                     print(e)
             TPs = [(x[2], x[3]) for x in self.selectedRoute.get_timing_points()[1]]
-            self.save_track_as_image(self.secondaryTrackList, direction="s")
+            #self.save_track_as_image(self.secondaryTrackList, direction="s")
             self.export_to_excel(self.secondaryTrees, TPs, self.secondaryTrackList,file + " " + secondaryDirection)
 
         self.stopProgress()
@@ -670,6 +744,8 @@ class mainWindow(tkinter.Tk):
             print(e)
             return
         tpCount = len(timingPoints)
+        if len(trees) == 0:
+            return
         for i,child in enumerate(trees[0].get_children()):
             #self.progress.step()
             #self.progressWin.update()
@@ -708,7 +784,7 @@ class mainWindow(tkinter.Tk):
                     sheet.cell(row=2 + i, column=1 + j).value =  datetime.datetime.strftime(datetime.datetime.strptime(trees[0].item(run)["values"][j + 1],"%H:%M:%S")+datetime.timedelta(hours=1),"%H:%M:%S")
                 else:
                     sheet.cell(row=2+i,column = 1 + j).value = trees[0].item(run)["values"][j + 1]
-            print(trackList[i][0])
+            print(trackList[i])
             print(self.getDateFunction(trackList[i][0]))
             sheet.cell(row = 2+i,column = 1 + tpCount).value = self.getDateFunction(trackList[i][0])
         #for i,child in enumerate(trees[1].get_children()):
@@ -744,11 +820,13 @@ class mainWindow(tkinter.Tk):
         print(folder)
         folder = os.path.join(folder, "Runs\\")
         sheet["L1"]=folder
-
-
-
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
+        route = self.routes[routeName]
+        prim = [(x[2], x[3]) for x in route.get_timing_points()[0]]
+        sec = [(x[2], x[3]) for x in route.get_timing_points()[1]]
+        #mp = mapmanager.MapManager(640, 640, 11, [], [prim, sec])
         if self.getTrack != None:
-            self.mapMan = mapmanager.MapManager(640, 640, 12, timingPoints[0], timingPoints)
+            self.mapMan = mapmanager.MapManager(640, 640, 12, [[],[]],[prim, sec] ) # cos I altered mapmanager to take both sets of timing points, its pretty messed up
             self.trackData = self.getTrack(trackList[0])
         offset=trackList[0][0]
         for i,t in enumerate(trackList[0][:-1]):
@@ -969,13 +1047,13 @@ class mainWindow(tkinter.Tk):
         self.previousLegIndex = -1
 
         if self.getTrack != None:
-            self.mapMan = mapmanager.MapManager(640,640,12,TPs[0],TPs)
-            #routeName = self.routeListBox.get(self.routeListBox.curselection())
-            #for k, v in self.routes.items():
-                #print("looking for ", routeName, v.name)
-                #if v.name == routeName:
-                    #self.mapMan = v.getMapManager()
-            self.mapImage =  ImageTk.PhotoImage(self.mapMan.get_map())
+            self.mapMan = mapmanager.MapManager(640,640,12,[],[TPs,TPs]) ### this is dumb, but still need it to calculate centre point and zoom of map in order to draw on map correctly.
+            routeName = self.routeListBox.get(tkinter.ACTIVE)
+            route = self.routes[routeName]
+            if self.displayedTrackDirection == "primary":
+                self.mapImage =  ImageTk.PhotoImage(route.get_primary_map())
+            else:
+                self.mapImage = ImageTk.PhotoImage(route.get_secondary_map())
             self.mapCanvas.create_image(0, 0, image = self.mapImage, anchor = tkinter.NW)
             self.trackData = self.getTrack(track)
             lats = self.trackData["Lat"].tolist()
@@ -1024,19 +1102,25 @@ class mainWindow(tkinter.Tk):
             self.previousLegIndex = index
 
     def save_track_as_image(self,trackList,direction="p"):
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
+        route = self.routes[routeName]
+        if direction== "p":
+            image = route.get_primary_map().copy()
+        else:
+            image = route.get_secondary_map().copy()
+
+
         for i,track in enumerate(trackList):
-            try:
-                if direction=="p":
-                    #image = Image.open(self.mapMan.get_map()).convert('RGB')
-                    image = self.mapMan.get_map().copy()
-                    print("image is ",image,type(image))
-                else:
-                    image = self.mapMan.get_sec_map().copy()
-                    #image = Image.open(self.mapMan.get_sec_map()).convert('RGB')
-                    print("image is ", image, type(image))
-            except Exception as e:
-                print("image error",e)
-                return
+            #try:
+                #if direction=="p":
+                    #image = route.get_primary_map().copy()
+                    #print("image is ",image,type(image))
+                #else:
+                    #image = route.get_secondary_map().copy()
+                    #print("image is ", image, type(image))
+            #except Exception as e:
+                #print("image error",e)
+                #return
             #image1 = ImageTk.PhotoImage(image)
             fnt = ImageFont.truetype("arial", size=18)
             drawimage = ImageDraw.Draw(image)
@@ -1153,39 +1237,15 @@ class mainWindow(tkinter.Tk):
         self.displaySecondary(sec)
         self.stopProgress()
 
-    def runProcess(self,event):
-        for tree in self.primaryTrees:
-            tree.forget()
-            tree.destroy()
-        for tree in self.secondaryTrees:
-            tree.forget()
-            tree.destroy()
-        self.primaryTrees=[]
-        self.secondaryTrees=[]
-        self.primaryTrackList = []
-        self.secondaryTrackList = []
-        routeName = self.routeListBox.get(self.routeListBox.curselection())
-        if not routeName in self.routes:
-            self.mapLabel.configure(text="Map")
-            self.journeyLabel.configure(text="Journey Time Summary")
-            return
 
-        fileList = list(filedialog.askopenfilenames(initialdir=dir))
-        if fileList == []:
-            self.mapLabel.configure(text="Map")
-            self.journeyLabel.configure(text="Journey Time Summary")
-            return
-        self.selectedRoute = self.routes[routeName]
-        threading.Thread(target=wrapper_function,args = (self.fun,self.routes[routeName],fileList)).start()
-        self.startProgress("Loading and Processing Data")
-        self.mapLabel.configure(text="Map - " + routeName)
-        self.journeyLabel.configure(text="Journey Time Summary - " + routeName)
-        return
 
     def spawn_excel_window(self):
         self.excelWindow = tkinter.Toplevel(self)
         self.excelWindow.protocol("WM_DELETE_WINDOW", self.excel_settings_closed)
         frame = tkinter.Frame(self.excelWindow)
+        #routeName = self.routeListBox.get(tkinter.ACTIVE)
+        self.routeListBox.activate(self.routeListBox.curselection())
+        self.routeListBox.config(state=tkinter.DISABLED)
         #self.entryValues = []
         self.labels = []
         for i in range(6):
@@ -1512,7 +1572,7 @@ class mainWindow(tkinter.Tk):
 
                 ### insert the journey times
 
-                times, speeds = list(r[1]), list(r[2])
+                times, speeds = list([t.split(" ")[1] for t in r[1]]), list(r[2])
                 times.insert(0,  str(i + 1))
                 self.secondaryTrees[0].insert("", "end", iid=i+1, values=times)
 
@@ -1705,7 +1765,7 @@ class mainWindow(tkinter.Tk):
             for i, r in enumerate(result):
 
 
-                times, speeds = list(r[1]), list(r[2])
+                times, speeds = list([t.split(" ")[1] for t in r[1]]), list(r[2])
                 times.insert(0,str(i + 1))
                 self.primaryTrees[0].insert("", "end", iid=i+1, values=times)
 
@@ -1822,24 +1882,17 @@ class mainWindow(tkinter.Tk):
     def change_zoom(self,val):
         if len(self.routeListBox.curselection()) ==0:
             return
-        routeName = self.routeListBox.get(self.routeListBox.curselection())
+        routeName = self.routeListBox.get(tkinter.ACTIVE)
 
         for k, v in self.routes.items():
             print("looking for ", routeName,v.name)
             if v.name == routeName:
 
                 v.update_zoom(val)
-                self.thumbnail = ImageTk.PhotoImage(v.get_map())
+                self.thumbnail = ImageTk.PhotoImage(v.get_primary_map())
                 self.thumbnailCanvas.create_image(10, 10, image=self.thumbnail, anchor=tkinter.NW)
 
     def displayRoutes(self):
-
-        #threading.Thread(target = self.fun,args=(1,2)).start()
-        #self.startProgress("Loading Timing Points")
-       # print("hurrah")
-        #return
-
-        #self.event_generate("<<finished>>")
         for tree in self.primaryTrees:
             tree.forget()
             tree.destroy()
@@ -1850,15 +1903,10 @@ class mainWindow(tkinter.Tk):
         self.routes = self.loadRoutesFunction()
         if self.routes is None:
             return
-        #self.startProgress("Loading Timing Points")
         for k,v in self.routes.items():
-            #print(v.name)
-            tps = [(x[2],x[3]) for x in v.get_timing_points()[0]]
-            mp = mapmanager.MapManager(640, 640, 11, tps[0], tps)
-            v.add_map(mp.get_thumbnail())
-            v.setMapManager(mp)
+            self.load_route_maps(v)
             self.routeListBox.insert(tkinter.END,v.name)
-        #self.stopProgress()
+
 
     def loadSettings(self):
         self.entryValues = []
