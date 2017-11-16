@@ -39,6 +39,7 @@ class MapManager():
         #print("before conversion", centreX, centreY)
         centre = self.pixelstolatlon((centreX, centreY))
         #print("centre is ",centre)
+        self.center_lat, self.center_lon = centre
         return centre
 
     def calculateZoomValue(self,points):

@@ -12,6 +12,7 @@ import utilities as ut
 from PIL import Image
 import mapmanager2
 import threading
+import tkinter
 
 
 
@@ -28,7 +29,7 @@ WHITE = (255,255,255)
 TRACSIS_BLUE = (20, 27, 77)
 TRANSLUCENT_YELLOW = (255,255,0,100)
 class MapViewer(pyglet.window.Window):
-    def __init__(self,width,height):
+    def __init__(self,width,height,left):
         super(MapViewer, self).__init__(width,height)
 
         self.label = pyglet.text.Label('Hello, world',
@@ -45,23 +46,18 @@ class MapViewer(pyglet.window.Window):
         self.topLeftOfImage =[0, self.height]
         self.pixelCoords = []
         self.timingPoints = []
-        self.fps_display = pyglet.clock.ClockDisplay()
         self.currentPosition = 0
         self.previousPosition = 0
-        self.visiblePoints = []
-        self.visibleLines = []
-        #self.currentPoint = (0,0)
-        #self.currentPoint2 = (0, 0)
-        self.leftMouseDown = False
+        self.dragging = False
         self.mapScale = 1
         self.activity = None
+        self.runIndices = None
+        self.isAlive = True
         self.pixelToMilesRatio = 0.3343211478136297 / 0.020022057657865237
         self.currentClosenessThreshold = 0.02  ### how close a point needs to get to a timing point to be marked as close
-        self.timingPointsToDisplay = 0  ### primary direction
+        self.currentDirection = 0  ### primary direction
         self.currentlySelectedPoint = -1
         self.notifyTimingPointAddedFunction = None
-        self.visibleBatch = pyglet.graphics.Batch()
-        self.invisibleBatch = pyglet.graphics.Batch()
         self.largeCircleBatch = pyglet.graphics.Batch()
         self.smallCircleBatch = pyglet.graphics.Batch()
         self.linesBatch = pyglet.graphics.Batch()
@@ -69,22 +65,14 @@ class MapViewer(pyglet.window.Window):
         self.currentPoint_LineBatch = pyglet.graphics.Batch()
         self.triangleBatch = pyglet.graphics.Batch()
         self.GetTickCount = pyglet.clock.tick()
-        self.timingPointsToDisplay = 0
-
-        #glEnable(GL_BLEND)  # transparency
-        #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
-        #with open("coords.pkl","rb") as f:
-           #coords =pickle.load(f)#[200:300]
-        #self.set_coords(coords)
-        #self.set_timing_points(tps)
-
-
-        self.selectedVertexLists = []
+        self.currentDirection = 0
         self.timingPoints = []
-        #self.vertexList = self.circle(100, 100, 5, 200, RED + RED * 200, self.visibleBatch,None)
+        self.set_location(left,30)
 
-
+    def on_close(self):
+        self.isAlive = False
+        self.windowClosedFunction()
+        self.close()
 
     def closest_node(self,node):
         temp = []
@@ -95,7 +83,7 @@ class MapViewer(pyglet.window.Window):
         ### calculate the new x and y values for all points
         ###
 
-        for i,tp in enumerate(self.timingPoints[self.timingPointsToDisplay]):
+        for i,tp in enumerate(self.timingPoints[self.currentDirection]):
             x, y = tp
             x -= self.topLeftOfImage[0]
             y = self.topLeftOfImage[1] - y
@@ -122,23 +110,63 @@ class MapViewer(pyglet.window.Window):
         print("treturning -1")
         return [-1]
 
+    def add_timing_point(self,x,y):
+        iw, ih = self.width, self.height
+        # calculate crop window size
+        cw, ch = iw / self.mapScale, ih / self.mapScale
+        print("cw", cw, ch)
+        print("viewport is", self.topLeftOfImage[0], self.topLeftOfImage[0] + cw, self.topLeftOfImage[1],
+              self.topLeftOfImage[1] + ch)
+        if cw > iw or ch > ih:
+            cw = iw
+            ch = ih
+            # crop it
+        x = (x / self.mapScale)
+        y = (y / self.mapScale)
+        x += self.topLeftOfImage[0]
+        y = self.topLeftOfImage[1] - y
+        newCoords = mapmanager2.get_lat_lon_from_x_y(self.centrePoint, x, y, 10)
+        print("new coords", newCoords)
+        self.notifyTimingPointAddedFunction([newCoords,self.currentDirection])
 
+    def set_cursor(self,type):
+        ###
+        ### setting the cursor also toggles the ability to add a timing point
+        ###
+        print("in set cursor, activity is",self.activity)
+        if type == "CURSOR_CROSSHAIR":
+            if self.activity is None:
+                self.activity = "addTimingPoint"
+                cursor = self.get_system_mouse_cursor(self.CURSOR_CROSSHAIR)
+                print("setting cursor to crosshair")
+        else:
+            if self.activity == "addTimingPoint":
+                self.activity = None
+                cursor = self.get_system_mouse_cursor(self.CURSOR_DEFAULT)
+                print("setting cursor to default")
+
+        self.set_mouse_cursor(cursor)
 
     def set_background_color(self,r, g, b, a):
         self.background = pyglet.image.SolidColorImagePattern((r, g, b, a)).create_image(800, 800)
 
     def on_mouse_motion(self,x,y,dx,dy):
-        #print(x,y,dx,dy)
         pass
 
     def on_mouse_press(self,x, y, button, modifiers):
         print("mouse down")
         if button == 1:
+            if self.activity == "addTimingPoint":
+                self.add_timing_point(x, y)
+
+                # self.activity = None
+                return
             result = self.closest_node((x,y))
             if result[0] == "point":
                 self.previousPosition = self.currentPosition
                 self.currentPosition = result[1]
                 print("current point is", self.currentPosition)
+                self.notifyPointChangeFunction(self.currentPosition)
                 self.redraw_canvas()
             elif result[0] == "tp":
                 print("selected tp",result[1]+1)
@@ -155,31 +183,41 @@ class MapViewer(pyglet.window.Window):
 
     def on_mouse_release(self,x,y,button,modifiers):
         if self.activity == "tpSelected":
-            pass
+            coords = self.timingPoints[self.currentDirection][self.selectedTP]
+            newlatlon = mapmanager2.get_lat_lon_from_x_y(self.centrePoint,coords[0],coords[1],10,size=800)
+            self.route.adjust_timing_point(self.currentDirection, self.selectedTP + 1, newlatlon)
         print("mouse up")
-        self.activity = None
+        if self.activity != "addTimingPoint":
+            self.activity = None
 
     def on_mouse_drag(self,x, y, dx, dy, buttons, modifiers):
         if self.activity == "mapSelected":
-            print("mouse drag",x, y, dx, dy)
+            self.dragging = True
             self.topLeftOfImage[0] -= dx/ self.mapScale
             self.topLeftOfImage[1] +=dy/ self.mapScale
-            print("topleft is now ", self.topLeftOfImage)
+            #print("topleft is now ", self.topLeftOfImage)
+            start = time.time() * 1000
             self.redraw_canvas()
+            self.dragging = False
+            self.on_draw()
         if self.activity == "tpSelected":
-            dx = self.coordsClicked[0] - x
-            dy = y -self.coordsClicked[1]
-            print("mouse drag tp selected", x, y, dx, dy)
-
+            iw, ih = self.width, self.height
+            # calculate crop window size
+            cw, ch = iw / self.mapScale, ih / self.mapScale
+            dx =  x - self.coordsClicked[0]
+            dy = self.coordsClicked[1] - y
+            dx = dx / self.width * cw
+            dy = dy / self.height * ch
             flag = self.TPMarkers[self.selectedTP]
-            print("current position of flag is", flag.x, flag.y)
             flag.x = x
             flag.y= y
-            print("current position of flag is", flag.x, flag.y)
+            coords = self.timingPoints[self.currentDirection][self.selectedTP]
+            self.timingPoints[self.currentDirection][self.selectedTP] = (coords[0] +dx,coords[1]+dy)
+            self.coordsClicked = (x,y)
             self.redraw_canvas()
+            self.on_draw()
 
     def on_mouse_scroll(self,x,y,scroll_x,scroll_y):
-        print("scrolled",x,y,scroll_x,scroll_y)
         iw, ih = self.width,self.height
         previousCw = iw / self.mapScale
         val = scroll_y
@@ -187,60 +225,41 @@ class MapViewer(pyglet.window.Window):
             self.mapScale *= scroll_y * 2
         else:
             self.mapScale /= -scroll_y * 2
-
         print("map scale is", self.mapScale)
-        #if self.mapScale > 512:
-            #self.mapScale = 512
+        if self.mapScale >2048:
+            self.mapScale = 2048
         cw, ch = iw / self.mapScale, ih / self.mapScale
         diff = previousCw - cw
-        print("diff is",diff)
         self.topLeftOfImage[0] += diff / 2
         self.topLeftOfImage[1] -= diff / 2
         if self.mapScale <= 1:
             self.mapScale = 1
             self.topLeftOfImage = [0,self.height]
-        print("top left of image is now",self.topLeftOfImage)
-        start = time.time() * 1000
         self.redraw_canvas()
-        print("redraw canvas took",time.time()*1000 - start)
 
     def redraw_canvas(self):
-
-        start = time.time() * 1000
-        self.selectedVertexLists = []
-
-        iw, ih = self.width,self.height #width,height
-        # calculate crop window size
-        cw, ch = iw / self.mapScale, ih / self.mapScale
-        # crop it
-        ###
-        ### self.topLeftOfImage is the absolute coords of the displayed part of the map
-        ### eg [100,100] would mean that (0,0) on the map panel would be showing [100,100] of the base map image
-        ###
-        self.visiblePoints = []
-        self.visibleLines = []
-        self.smallCirclesList = []
-        self.largeCirclesList= []
         temp = []
-        start = time.time() * 1000
-
         ####
         ### calculate the new x and y values for all points
         ###
-        start = time.time() * 1000
-        for point in self.pixelCoords:
-            x, y = point
-            x -= self.topLeftOfImage[0]
-            y = self.topLeftOfImage[1] - y
-            x = (x * self.mapScale)
-            y = (y * self.mapScale)
+        if self.runIndices is None:
+            start,finish = 0,len(self.pixelCoords)
+        else:
+            start,finish = self.runIndices
+        for index,point in enumerate(self.pixelCoords):
+            if index>= start and index<=finish:
+                x, y = point
+                x -= self.topLeftOfImage[0]
+                y = self.topLeftOfImage[1] - y
+                x = (x * self.mapScale)
+                y = (y * self.mapScale)
+            else:
+                x,y = -100,-100
             temp.append(x)
             temp.append(y)
-        print("calculating new coords took",time.time()*1000-start)
         self.largeCirclesVertexList.vertices = temp
         self.smallCirclesVertexList.vertices = temp
         self.linesVertexList.vertices = temp[:4] + temp
-
         ###
         ### set up current position vertices for the current position line
         ###
@@ -249,8 +268,6 @@ class MapViewer(pyglet.window.Window):
             x1, y1 = temp[(self.currentPosition - 1) * 2], temp[(self.currentPosition - 1) * 2 + 1]
             self.currentPointVertexList.vertices = [x, y, x1, y1]
             self.currentPoint_LineVertexList.vertices = [x, y, x1, y1]
-        print("setting up vertex lists took", time.time() * 1000 - start)
-
         ###
         ### set up the triangles
         ###
@@ -259,9 +276,7 @@ class MapViewer(pyglet.window.Window):
             for index in range(2,len(temp),2):
                 x = temp[index]
                 y = temp[index+1]
-                #print("setting up triangle for point", index, x, y, self.topLeftOfImage)
                 if x > 0 and x < self.width and y> 0 and y < self.height:
-                    #print("triangle selected",index,x,y,self.topLeftOfImage)
                     prevX = temp[index-2]
                     prevY = temp[index-1]
 
@@ -278,11 +293,8 @@ class MapViewer(pyglet.window.Window):
                     else:
                         unit_x = 0
                         unit_y = 0
-                    #p1 = (midpoint[0] + (10 * unit_x), midpoint[1] + (10 * unit_y))
                     vertices[((index-2)*3)] = midpoint[0] + (10 * unit_x)
                     vertices[((index-2)*3) + 1] = midpoint[1] + (10 * unit_y)
-                    # print("appending", p1, midpoint[0] + (10 * unit_x), midpoint[1] + (10 * unit_y))
-                    # print(vertices[:6])
                     ###
                     ### calculate slope of perpendicular line
                     ###
@@ -299,21 +311,6 @@ class MapViewer(pyglet.window.Window):
                         p2 = (midpoint[0] - 10, midpoint[1])
                         p3 = (midpoint[0] + 10, midpoint[1])
                     else:
-                        ### take a random point on the perpendicular line
-                        ### calculate unit vector
-                        ### work out 2 points
-                        ###
-                        #newX = midpoint[0] - 20
-                        #newY = (slope * newX) + c
-                        #dx = midpoint[0] - newX
-                        #dy = midpoint[1] - newY
-                        #mag = ((dx ** 2) + (dy ** 2)) ** (1 / 2)
-                        #if mag != 0:
-                            #unit_x = dx / mag
-                            #unit_y = dy / mag
-                        #else:
-                            #unit_x = 0
-                            #unit_y = 0
                         ###
                         ### we can use the previously calculated unit vector(a,b) to give us the perpendicular unit vector(-b,a)
                         ###
@@ -323,14 +320,12 @@ class MapViewer(pyglet.window.Window):
                     vertices[((index-2)*3) + 3] =p2[1]
                     vertices[((index-2)*3) + 4] =p3[0]
                     vertices[((index-2)*3) + 5] =p3[1]
-            print("setting up triangle vertices took", time.time() * 1000 - start)
         self.triangleVertexList.vertices= vertices
-        print("setting up triangles took", time.time() * 1000 - start)
         ###
         ### set up the timing point flags
         ###
         for index,flag in enumerate(self.TPMarkers):
-            x,y = self.timingPoints[self.timingPointsToDisplay][index]
+            x,y = self.timingPoints[self.currentDirection][index]
             x -= self.topLeftOfImage[0]
             y = self.topLeftOfImage[1] - y
             x = (x * self.mapScale)
@@ -339,7 +334,6 @@ class MapViewer(pyglet.window.Window):
             flag.y = y
             self.TPNumbers[index].x = int(x -42 + 21)
             self.TPNumbers[index].y = int(y + 50)
-
 
     def circle(self,x, y, r, n, c, b,group):
         """ Adds a vertex list of circle polygon to batch and returns it. """
@@ -355,7 +349,6 @@ class MapViewer(pyglet.window.Window):
         print(p)
         return list(p)
         return self.largeCircleBatch.add_indexed(n + 2, pyglet.gl.GL_TRIANGLES, group, index, ('v2f/dynamic', p), ('c3B/static', (c + c[-3:])))
-
 
     def make_circle(self,numPoints,radius,centre_x,centre_y):
         verts = []
@@ -441,88 +434,35 @@ class MapViewer(pyglet.window.Window):
         cw, ch = iw / self.mapScale, ih / self.mapScale
         print("cw", cw, ch)
         try:
-            x,y = self.timingPoints[self.timingPointsToDisplay][index]
+            x,y = self.timingPoints[self.currentDirection][index]
         except KeyError as e:
             print("no such timing popint")
             return
         self.topLeftOfImage[0] = x- cw/2
         self.topLeftOfImage[1] = y + ch/2
-        start = time.time()*1000
         self.redraw_canvas()
-        print("redrawing canvas took",time.time()*1000 - start)
-
-
 
     def view_gps_point(self,index,redraw=False):
-        print("selected point",index)
         iw, ih = self.width, self.height
         # calculate crop window size
         cw, ch = iw / self.mapScale, ih / self.mapScale
-        print("cw,ch",cw,ch)
         try:
             x,y = self.pixelCoords[index]
-            print("x,y is",x,y)
         except KeyError as e:
             print("no such timing popint")
             return
-        print("previous top left is", self.topLeftOfImage)
         self.topLeftOfImage[0] = x - cw/2
         self.topLeftOfImage[1] = y + ch/2
-        print("new top left is",self.topLeftOfImage)
         self.previousPosition = self.currentPosition
         self.currentPosition = index
-        start = time.time() * 1000
         if redraw==True:
             self.redraw_canvas()
-        print("redrawing canvas took", time.time() * 1000 - start)
-
-    def temp(self):
-        self.clear()
-        self.TPBatch = pyglet.graphics.Batch()
-        self.TPNumbersBatch = pyglet.graphics.Batch()
-
-        self.TPMarkers = []
-        self.TPNumbers = []
-        flagImage = pyglet.image.load("blue marker.png")
-        flag = pyglet.sprite.Sprite(flagImage, x=400, y=400, batch=self.TPBatch)
-        label = pyglet.text.Label(text=str(15), font_size=9, color=(255, 255, 255, 255),
-                                  batch=self.TPNumbersBatch, x=400+20, y=400+48, anchor_x="left",
-                                  anchor_y="top", bold=True, italic=True, group=None)
-        flag.scale = 0.25
-        print("label", label.height)
-        self.TPMarkers.append(flag)
-        self.TPNumbers.append(label)
-
-        flag = pyglet.sprite.Sprite(flagImage, x=500, y=400, batch=self.TPBatch)
-        label = pyglet.text.Label(text=str(1), font_size=9, color=(255, 255, 255, 255),
-                                  batch=self.TPNumbersBatch, x=500+20, y=400+48, anchor_x="left",
-                                  anchor_y="top", bold=True, italic=True, group=None)
-        flag.scale = 0.25
-        print("label", label.height)
-        self.TPMarkers.append(flag)
-        self.TPNumbers.append(label)
-        self.TPBatch.draw()
-        self.TPNumbersBatch.draw()
-        return
-
 
     def on_draw(self):
-
-
-        #self.temp()
-        #return
-
         glEnable(GL_DEPTH_TEST)
         pyglet.gl.glLineWidth(1)
         gl.glClearColor(232 / 255, 232 / 255, 232 / 255, 1.0)
         self.clear()
-        #l = self.make_circle(30, 110, 400, 400)
-        #l = pyglet.graphics.vertex_list(30, ('v2f', l), ("c4B", TRANSLUCENT_YELLOW * 30))
-       # l.draw(GL_LINE_LOOP)
-        #print("drawing)")
-        #self.dispatch_events()
-        #return
-
         ###
         ### draw the circles around the timing points
         ###
@@ -533,10 +473,7 @@ class MapViewer(pyglet.window.Window):
         for index,flag in enumerate(self.TPMarkers):
             x,y = flag.x +42,flag.y
             l = self.make_circle(30, radius, x, y)
-            #l = pyglet.graphics.vertex_list(30, ('v2f', l), ("c4B", TRANSLUCENT_YELLOW * 30))
             pyglet.graphics.draw(30,GL_LINE_LOOP,('v2f', l), ("c4B", TRANSLUCENT_YELLOW * 30))
-            #l.draw(GL_LINE_LOOP)
-
         pyglet.gl.glLineWidth(6)
         glEnable(GL_POINT_SMOOTH)
         glHint(GL_POINT_SMOOTH_HINT, GL_NICEST)
@@ -544,12 +481,9 @@ class MapViewer(pyglet.window.Window):
         self.smallCircleBatch.draw()
         glPointSize(16)
         self.largeCircleBatch.draw()
-
-
         if self.mapScale >= 512:
             self.triangleBatch.draw()
         self.linesBatch.draw()
-
         glDisable(GL_DEPTH_TEST)
         self.currentPointBatch.draw()
         self.currentPoint_LineBatch.draw()
@@ -558,31 +492,11 @@ class MapViewer(pyglet.window.Window):
         self.flip()
 
     def set_up_vertex_lists(self):
-        radius = 7
         self.pointsAsVertices = None
-        self.linesAsVertices = []
-        self.circlesAsTriangles = []
-        self.smallCirclesList= None
-        self.largeCirclesList= None
-        #flagGroup
         lineGroup = pyglet.graphics.Group() #OrderedGroup(3)
         largecircleGroup = pyglet.graphics.Group() #.OrderedGroup(2)
         smallCircleGroup= pyglet.graphics.Group() #.OrderedGroup(1)
-        currentPositionGroup  = pyglet.graphics.Group() #.OrderedGroup(0)
-        currentPositionLineGroup = pyglet.graphics.Group()  # .OrderedGroup(0)
-        self.smallCircles = pyglet.graphics.Batch()
-        self.largeCircles = pyglet.graphics.Batch()
-
-        previousX = 0
-        previousY = 0
-        count = 0
-        #for x,y in self.pixelCoords:
-            #self.circlesAsTriangles += self.circle(x,y,radius,10,GREY + GREY *10,None,None)
-            #count +=12
-        #print("lenght of circle vertices is",len(self.circlesAsTriangles))
-        #self.largeCirclesVertexList =self.largeCircleBatch.add(count,GL_TRIANGLES,None,("v2f/stream",self.circlesAsTriangles))
         self.pointsAsVertices = [element for tupl in self.pixelCoords for element in tupl]
-        print(self.pointsAsVertices[:20])
         self.pointsAsVertices = [self.height - item   if index % 2 == 1 else item for index,item in enumerate(self.pointsAsVertices)]
         self.largeCirclesVertexList = self.largeCircleBatch.add(len(self.pointsAsVertices)//2,GL_POINTS,pyglet.graphics.OrderedGroup(5,largecircleGroup),("v2f/stream",self.pointsAsVertices),('c3B/static', GREY * (len(self.pointsAsVertices)//2)))
         self.smallCirclesVertexList = self.smallCircleBatch.add(len(self.pointsAsVertices)//2,GL_POINTS,pyglet.graphics.OrderedGroup(2,smallCircleGroup),("v2f/stream",list(self.pointsAsVertices)),('c3B/static', WHITE * (len(self.pointsAsVertices)//2)))
@@ -591,7 +505,6 @@ class MapViewer(pyglet.window.Window):
         self.currentPoint_LineVertexList = self.currentPoint_LineBatch.add(2,GL_LINES,None,("v2f/stream",self.pointsAsVertices[:4]),('c3B/static', (255,255,0)*2 ))
         self.currentPosition = 1
         self.previousPosition = 0
-        print("vertices of current point are",self.currentPointVertexList.vertices,len(self.currentPointVertexList.vertices))
         coords = [element for tupl in self.pixelCoords for element in tupl]
         vertices = []
         for index in range(2,len(coords),2):
@@ -599,7 +512,6 @@ class MapViewer(pyglet.window.Window):
             y = coords[index + 1]
             prevX = coords[index-2]
             prevY = coords[index-1]
-
             midpoint = ((prevX + x) / 2, (prevY + y) / 2)
             dx = x - prevX
             dy = y - prevY
@@ -613,11 +525,9 @@ class MapViewer(pyglet.window.Window):
             else:
                 unit_x = 0
                 unit_y = 0
-            p1 = (midpoint[0] + (10 * unit_x), midpoint[1] + (10 * unit_y))
             vertices.append(midpoint[0] + (10 * unit_x))
             vertices.append(midpoint[1] + (10 * unit_y))
-            #print("appending",p1,midpoint[0] + (10 * unit_x),midpoint[1] + (10 * unit_y))
-            #print(vertices[:6])
+
             ###
             ### calculate slope of perpendicular line
             ###
@@ -655,18 +565,15 @@ class MapViewer(pyglet.window.Window):
             vertices.append(p2[1])
             vertices.append(p3[0])
             vertices.append(p3[1])
-
-        print("vertices are",len(vertices),vertices[:6])
         self.triangleVertexList = self.triangleBatch.add(len(vertices)//2,GL_TRIANGLES,None,("v2f/stream",vertices),('c3B/static', RED * (len(vertices)//2)))
-        print("last is",self.triangleVertexList.vertices[-6:])
-        print("adhgdhd fisrty is", self.triangleVertexList.vertices[:6])
 
     def set_coords(self,coords):
         self.pixelCoords = coords
         self.topLeftOfImage[0] = self.pixelCoords[0][0] - int(self.width/2)
         self.topLeftOfImage[1] = self.pixelCoords[0][1] - int(self.height / 2)
         self.set_up_vertex_lists()
-        self.set_background_color(120, 120, 120, 1)
+        #self.set_background_color(120, 120, 120, 1)
+        print("FINISHED SET UP")
         #pyglet.app.run()
 
     def set_route(self,route):
@@ -675,56 +582,25 @@ class MapViewer(pyglet.window.Window):
         primaryTps = [mapmanager2.get_coords(self.centrePoint,(tp[2],tp[3]),10,size=800) for tp in tps[0]]
         secondaryTps =[mapmanager2.get_coords(self.centrePoint,(tp[2],tp[3]),10,size=800) for tp in tps[1]]
         self.timingPoints = [primaryTps,secondaryTps]
-        self.timingPointsToDisplay = 0
+        self.currentDirection = 0
+
+        self.set_timing_points_to_display(self.currentDirection)
+
+    def set_timing_points_to_display(self,direction):
+        self.currentDirection = direction
         self.TPBatch = pyglet.graphics.Batch()
         self.TPNumbersBatch = pyglet.graphics.Batch()
         self.TPMarkers = []
         self.TPNumbers = []
         flagImage = pyglet.image.load("blue marker.png")
-        for index,c in enumerate(self.timingPoints[self.timingPointsToDisplay]):
+        for index,c in enumerate(self.timingPoints[self.currentDirection]):
             print("adding flag with coords",c)
             flag = pyglet.sprite.Sprite(flagImage, x=c[0], y=c[1], batch=self.TPBatch)
             label = pyglet.text.Label(text=str(index+1),font_size=9,color = (255,255,255,255),batch=self.TPNumbersBatch,x=c[0],y=c[1],anchor_x="left",anchor_y="top",bold=True,italic=True,group=None)
             flag.scale = 0.25
-
             self.TPMarkers.append(flag)
             self.TPNumbers.append(label)
-
-    def set_timing_points_to_display(self,direction):
-        self.timingPointsToDisplay = direction
         self.redraw_canvas()
-
-    def set_timing_points(self,coords):
-        ###
-        ### NOT USED!!!
-        ###
-
-
-
-        #self.centrePoint = self.pixelCoords[0]
-        #print("nof of coords",len(self.pixelCoords))
-        self.tps = coords
-        self.TPBatch = pyglet.graphics.Batch()
-        self.TPNumbersBatch = pyglet.graphics.Batch()
-        print("received timing points",coords)
-        self.TPMarkers = []
-        self.TPNumbers = []
-        flagImage = pyglet.image.load("blue marker.png")
-        rawimage = flagImage.get_image_data()
-        format = 'RGBA'
-        pitch = rawimage.width * len(format)
-        pixels = rawimage.get_data(format, pitch)
-        print(pixels)
-        #flagImage.width = 64
-        #flagImage.height = 64
-        for index,c in enumerate(self.tps):
-            print("adding flag with coords",c)
-            flag = pyglet.sprite.Sprite(flagImage, x=c[0], y=c[1], batch=self.TPBatch)
-            label = pyglet.text.Label(text=str(index+10),font_size=9,color = (255,255,255,255),batch=self.TPNumbersBatch,x=c[0],y=c[1],anchor_x="left",anchor_y="top",bold=True,italic=True,group=None)
-            flag.scale = 0.25
-
-            self.TPMarkers.append(flag)
-            self.TPNumbers.append(label)
 
     def set_centre_point(self,p):
         ###
@@ -733,18 +609,24 @@ class MapViewer(pyglet.window.Window):
         ###
         self.centrePoint = p
 
+    def set_run_indices(self,runIndices):
+        self.runIndices = runIndices
+        self.redraw_canvas()
+
     def update(self):
         dt = pyglet.clock.tick()
         self.GetTickCount += dt
-        self.on_draw()
-        self.dispatch_events()
+        if self.isAlive:
+            self.on_draw()
+            self.dispatch_events()
 
+    def set_callback_function(self,title,fun):
+        if title == "notify change of point":
+            self.notifyPointChangeFunction = fun
+        if title == "notify added timing point":
+            self.notifyTimingPointAddedFunction = fun
+        if title == "notify window closed":
+            self.windowClosedFunction = fun
 
-#tps = [(51.90408278056543,-8.47759902705305),(51.901286,-8.4796053),(51.8996839,-8.4783876),(51.8977409,-8.4771538)]
-
-#window = MapViewer(1500,1000)
-#window.start()
-#window.push_handlers(pyglet.window.event.WindowEventLogger())
-#pyglet.app.run()
 
 

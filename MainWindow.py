@@ -320,18 +320,7 @@ class mainWindow(tkinter.Tk):
         self.journeyLabel.configure(text="Journey Time Summary - " + routeName)
         return
 
-    def failed_runs_clicked(self,event):
-        widget = event.widget
-        print(event.x,event.y)
-        row = widget.identify_row(event.y)
-        col = widget.identify_column(event.x)
-        print("row,col",row,col)
-        print(widget.identify_element(event.x,event.y))
-        print(widget.set(row,col))
-        if col  == "#3":
-            self.view_timing_point(None,index=int(widget.set(row,col)))
-        else:
-            self.view_gps_point(None,index=int(widget.set(row,col)))
+        receive_notification_track_window_closed
 
     def full_track_view_closed(self,win):
         self.routeListBox.config(state=tkinter.NORMAL)
@@ -539,7 +528,6 @@ class mainWindow(tkinter.Tk):
         self.stopProgress()
 
     def startProgress(self,msg):
-
         self.progressWin = tkinter.Toplevel(self,width = 200,height = 200)
         x = int(self.winfo_screenwidth()/2 - 100)
         y = int(self.winfo_screenheight() / 2 - 100)
@@ -1101,40 +1089,29 @@ class mainWindow(tkinter.Tk):
             self.draw_leg((self.trackData.iloc[index]["Lat"],self.trackData.iloc[index]["Lon"]),(self.trackData.iloc[index]["latNext"],self.trackData.iloc[index]["lonNext"]),-1)
             self.previousLegIndex = index
 
-    def save_track_as_image(self,trackList,direction="p"):
+    def save_track_as_image(self,track,index,trackNo):
         routeName = self.routeListBox.get(tkinter.ACTIVE)
         route = self.routes[routeName]
-        if direction== "p":
+        if index== 0:
             image = route.get_primary_map().copy()
         else:
             image = route.get_secondary_map().copy()
 
 
-        for i,track in enumerate(trackList):
-            #try:
-                #if direction=="p":
-                    #image = route.get_primary_map().copy()
-                    #print("image is ",image,type(image))
-                #else:
-                    #image = route.get_secondary_map().copy()
-                    #print("image is ", image, type(image))
-            #except Exception as e:
-                #print("image error",e)
-                #return
-            #image1 = ImageTk.PhotoImage(image)
-            fnt = ImageFont.truetype("arial", size=18)
-            drawimage = ImageDraw.Draw(image)
-            trackData = self.getTrack(track)
-            trackData[:-1].apply(lambda row: self.draw_leg_on_image((row["Lat"], row["Lon"]), (row["latNext"], row["lonNext"]), row["legSpeed"],drawimage),axis=1)
-            if self.check4.get() == 1:
-                t = datetime.datetime.strftime(trackData.iloc[0]["Time"] +datetime.timedelta(hours=1),"%H:%M:%S")
-            else:
-                t = datetime.datetime.strftime(trackData.iloc[0]["Time"],"%H:%M:%S")
-            drawimage.rectangle([0, 0, 100, 50], fill="white")
-            drawimage.text((10, 10), text=t, font=fnt, fill="black")
-            folder = os.path.dirname(os.path.abspath(__file__))
-            folder = os.path.join(folder, "Runs\\")
-            image.save(folder + "/track " + str(i+1) + ".jpg")
+
+        fnt = ImageFont.truetype("arial", size=18)
+        drawimage = ImageDraw.Draw(image)
+        trackData = self.getTrack(track)
+        trackData[:-1].apply(lambda row: self.draw_leg_on_image((row["Lat"], row["Lon"]), (row["latNext"], row["lonNext"]), row["legSpeed"],drawimage),axis=1)
+        if self.check4.get() == 1:
+            t = datetime.datetime.strftime(trackData.iloc[0]["Time"] +datetime.timedelta(hours=1),"%H:%M:%S")
+        else:
+            t = datetime.datetime.strftime(trackData.iloc[0]["Time"],"%H:%M:%S")
+        drawimage.rectangle([0, 0, 100, 50], fill="white")
+        drawimage.text((10, 10), text=t, font=fnt, fill="black")
+        folder = os.path.dirname(os.path.abspath(__file__))
+        folder = os.path.join(folder, "Runs\\")
+        image.save(folder + "/track " + str(trackNo) + ".jpg")
 
     def draw_leg_on_image(self,p1,p2,speed,drawImage):
         colours = [(0,0,0), (255,0,0), (255,215,0),(46,139,87), (0,191,255)]
@@ -1955,7 +1932,16 @@ class mainWindow(tkinter.Tk):
             data[["Time","Lat","Lon","legTime","legDist","legSpeed","accel"]].to_excel(writer,"track " + str(index))
         writer.save()
 
-
+    def load_route_maps(self, route):
+        print("setting up maps for ", route.name)
+        prim = [(x[2], x[3]) for x in route.get_timing_points()[0]]
+        sec = [(x[2], x[3]) for x in route.get_timing_points()[1]]
+        mp = mapmanager.MapManager(640, 640, 11, [], [prim, sec])
+        prim, sec = mp.get_thumbnails()
+        # prim.show()
+        route.add_primary_map(prim)
+        route.add_secondary_map(sec)
+        route.setMapManager(mp)
 
 
 def wrapper_function(fun,routeName,fileList):
