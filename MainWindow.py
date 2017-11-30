@@ -549,7 +549,6 @@ class mainWindow(tkinter.Tk):
             self.after(100,self.step_progress)
 
 
-
     def stopProgress(self):
         #print("in self.stop progress")
         print("progressbar is", type(self.progress))
@@ -1237,9 +1236,13 @@ class mainWindow(tkinter.Tk):
         for i in range(3):
 
             self.labels[i].grid(row=i, column=0, padx=2, pady=2)
-            tkinter.Entry(frame, textvariable=self.entryValues[2*i], width=7).grid(row=i, column=1, padx=2, pady=2)
+            e = tkinter.Entry(frame, textvariable=self.entryValues[2*i], width=7)
+            e.grid(row=i, column=1, padx=2, pady=2)
+            e.bind("<FocusOut>",self.validate_time)
             self.labels[3+i].grid(row=i, column=2, padx=5, pady=5)
-            tkinter.Entry(frame, textvariable=self.entryValues[(2*i)+1], width=7).grid(row=i, column=3, padx=2, pady=2)
+            e = tkinter.Entry(frame, textvariable=self.entryValues[(2*i)+1], width=7)
+            e.grid(row=i, column=3, padx=2, pady=2)
+            e.bind("<FocusOut>", self.validate_time)
         tkinter.Label(frame,text = "Primary Direction").grid(row = 3,column = 0)
         #self.entryValues.append(tkinter.StringVar())
         self.cbox = ttk.Combobox(frame,values=["North","South", "East","West", "Clockwise","Anticlockwise"],width = 13)
@@ -1260,6 +1263,8 @@ class mainWindow(tkinter.Tk):
         self.check4.set(0)
         tkinter.Button(frame,text = "Export",command = self.start_export).grid(row  = 6,column  =0,padx=10, pady=10)
         tkinter.Button(frame, text="Exit", command = self.excel_settings_closed).grid(row=6, column=1,padx=10, pady=10)
+
+
 
     def spawn_settings_window(self):
         self.settingsWindow = tkinter.Toplevel(self)

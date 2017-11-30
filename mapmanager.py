@@ -18,7 +18,7 @@ class MapManager():
         self.zoomValues = list(reversed(self.zoomValues))
         self.map_height = map_height
         self.map_width = map_width
-        self.zoom = self.calculateZoomValue(tps[0])
+        self.zoom = self.calculate_zoom_value(tps[0])
         self.tps = tps
         self.center_lat,self.center_lon = self.get_centre_of_points(tps[0])
         self.static_map = self.load_map(self.center_lat, self.center_lon)
@@ -42,31 +42,30 @@ class MapManager():
         self.center_lat, self.center_lon = centre
         return centre
 
-    def calculateZoomValue(self,points):
-        #print("points in calc zoom are",points,self.center_lat,self.center_lon)
-        maxX = max(points, key=lambda item: item[0])[0]
-        maxY = max(points, key=lambda item: item[1])[1]
-        minX = min(points, key=lambda item: item[0])[0]
-        minY = min(points, key=lambda item: item[1])[1]
-        #print(maxX, minX, maxY, minY)
-        #print(maxX - minX, maxY - minY)
-        maxVal =max(maxX - minX, maxY - minY)
-        #print("maxval is ",maxVal)
-        #print("calculated zoom as ",20 -bisect.bisect_right(self.zoomValues,maxVal),bisect.bisect_right(self.zoomValues,maxVal))
-        for i,z in enumerate(self.zoomValues):
-            diff = maxVal-z
-            #print("diff ", diff, z,20-i,diff/z,z/diff)
-            if diff < 0:
-                if abs(diff/z) < 0.15:
-                    #print("adding 1 to zoom")
-                    zoom = i+1
-                else:
-                    zoom = i
-                break
-        #print("second version, zoom is",20 - zoom)
-        return 20 - zoom
 
 
+
+    def calculate_zoom_value(self,points):
+        GLOBE_WIDTH = 256
+        west = min(points, key=lambda item: item[1])[1]
+        east = max(points, key=lambda item: item[1])[1]
+        north = max(points, key=lambda item: item[0])[0]
+        south = min(points, key=lambda item: item[0])[0]
+        print("west,east",west,east,north,south)
+        delta = 0
+        angle = east - west
+        angle2 = north - south #(latRad(north)-latRad(south))/math.pi
+        print("angles are",angle,angle2)
+        zoom = math.floor(math.log(640 * 360 / angle / GLOBE_WIDTH) / math.log(2)) - delta
+        zoom1 = math.floor(math.log(640 * 360 / angle2 / GLOBE_WIDTH) / math.log(2)) - 1
+        print("zoomes are",zoom,zoom1)
+        if angle2 > angle:
+            angle = angle2
+            delta = 1
+        if (angle < 0):
+            angle += 360
+        zoom = math.floor(math.log(640 * 360 / angle / GLOBE_WIDTH) / math.log(2)) - delta
+        return min(zoom,zoom1)
 
 
     def get_map(self):
@@ -217,14 +216,21 @@ class MapManager():
         return (self.map_height / 256.0) * (360.0 / pow(2, self.zoom))
 
 
+def latRad(lat):
+        sin = math.sin(lat * math.pi / 180)
+        radX2 = math.log((1 + sin) / (1 - sin)) / 2
+        return max(min(radX2, math.pi), -math.pi) / 2
 
-
+def zoom(mapPx, worldPx, fraction):
+        return math.floor(math.log(mapPx / worldPx / fraction) / math.LN2)
 
 points = [(56.40501,-3.45778),(56.40716,-3.48441),(56.44521,-3.47190)] # route 3
-points = [(56.38288,-3.40631),(56.44521,-3.47190),(56.36840,-3.42832)] # route 1
+points = [(55.8650662,-4.2538628),(55.8645469,-4.2489081),(55.8631471,-4.2494184),(55.8615616,-4.2500018),(55.8614203,-4.2488799),(55.8606304,-4.2491676)] # route 1
 #points = [(54.3338,-7.66276) ,(54.3338,-7.66279), (54.333309999999997, -7.6634900000000004)]
-#mp = MapManager(640,640,11,(56.40501,-3.45778),points)
+mp = MapManager(640,640,11,points,[points,points])
 #print(mp.get_centre_of_points(points))
+#print(mp.calculateZoomValue(points))
+print(mp.calculate_zoom_value(points))
 
 #exit()
 

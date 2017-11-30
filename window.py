@@ -18,6 +18,7 @@ import mapmanager2
 import pandas as pd
 import mapViewer
 import pickle
+import shutil
 
 
 
@@ -220,10 +221,12 @@ class mainWindow(tkinter.Tk):
             e = tkinter.Entry(frame,width=7)
             e.grid(row=row,column=1)
             e.insert(0,times[(row*2)])
+            e.bind("<FocusOut>", self.validate_time)
             tkinter.Label(frame, text="To",font=labelFont, relief=tkinter.FLAT,borderwidth=1,width = 4).grid(row=row, column=2, sticky="nsew")
             e = tkinter.Entry(frame, width=7)
             e.grid(row=row, column=3,padx=(0,20))
             e.insert(0, times[(row * 2)+1])
+            e.bind("<FocusOut>", self.validate_time)
         tkinter.Label(frame,text="Primary Dir",font=labelFont, relief=tkinter.FLAT,borderwidth=1,anchor="e",width = 14).grid(row=3,column=0,sticky="nsew")
         ttk.Combobox(frame, values=["North", "South", "East", "West", "Clockwise", "Anticlockwise"],width=13).grid(row=3, column=1,columnspan=3)
         var = tkinter.IntVar()
@@ -245,7 +248,25 @@ class mainWindow(tkinter.Tk):
         c.grid(row=5, column=0)
         c.var = var
         tkinter.Button(frame, text="Exit", command=self.excel_settings_closed,font=labelFont,width = 8).grid(row=6, column=0)
-        tkinter.Button(frame, text="Export", command=self.startProgress("Exporting",self.export),font=labelFont,width = 8).grid(row=6, column=1,columnspan=3)
+        tkinter.Button(frame, text="Export", command=self.export,font=labelFont,width = 8).grid(row=6, column=1,columnspan=3)
+
+
+    def validate_time(self,event):
+        entry = event.widget
+        text = entry.get()
+        if len(text) == 5:
+            if text[2] == ":":
+                h,m = text.split(":")
+                try:
+                    h = int(h)
+                    m =int(m)
+                    if h >= 0 and h <=23 and m >=0 and m <=59:
+                        return
+                except Exception as e:
+                    pass
+        messagebox.showinfo(message="invalid time")
+        entry.delete(0,tkinter.END)
+        entry.focus_set()
 
     def export(self):
         file = filedialog.asksaveasfilename()
@@ -297,8 +318,9 @@ class mainWindow(tkinter.Tk):
         else:
             td = datetime.timedelta(hours=0)
         exportRawData = False
-        if children[17].var.get() == 1:
+        if children[16].var.get() == 1:
             exportRawData = True
+            print("EXPORTING RAWE DATA!!!")
         runs = [[],[],[]]
         wb = openpyxl.load_workbook("Template.xlsm", keep_vba=True)
         sheets = wb.get_sheet_names()
@@ -346,13 +368,14 @@ class mainWindow(tkinter.Tk):
                     if exportRawData:
                         rawData = []
                         df = self.getTrack(runData[0])
+                        df["accel"] = (df["legSpeed"] - df["legSpeed"].shift(-1))/df["legTime"]
                         exportSheet = wb.create_sheet("Raw Data - Track " + str(runIndex + 1))
-                        df[["Record", "Time", "Lat", "Lon", "legTime", "legSpeed"]].apply(
+                        df[["Record", "Time", "Lat", "Lon", "legTime", "legSpeed","accel"]].apply(
                             lambda x: rawData.append(x.tolist()), axis=1)
                         for i, d in enumerate(rawData):
                             for j, item in enumerate(d):
                                 exportSheet.cell(row=i + 1, column=j + 1).value = item
-                    self.save_track_as_image(runData[0],index,runIndex,td)
+                    self.save_track_as_image(runData[0],index,runIndex +1,td)
                     runs[t//2].append(runIndex)
                     for j in range(tpCount):
                             ### add on an hour
@@ -449,14 +472,14 @@ class mainWindow(tkinter.Tk):
         sec = [(x[2], x[3]) for x in route.get_timing_points()[1]]
         #self.mapMan = mapmanager.MapManager(640, 640, 12, [[], []], [prim,sec])  # cos I altered mapmanager to take both sets of timing points, its pretty messed up
         self.mapMan.get_centre_of_points([prim,sec][directionIndex]) ## a hack to reset the centre point of the map depending on whether its prim or sec tps
-        trackIndex = int(curItem.replace("run_", "")) - 1
+        trackIndex = int(curItem.replace("run_", ""))
         print("selected item is",curItem,"direction is",directionIndex,"track index iS",trackIndex)
         label = self.winfo_children()[2].winfo_children()[0]
-        data = self.baseData[directionIndex][0][trackIndex]
+        data = self.baseData[directionIndex][0][trackIndex-1]
         self.trackImg = ImageTk.PhotoImage(self.save_track_as_image(data[0],directionIndex,trackIndex,datetime.timedelta(hours=0)))
         self.thumbnailCanvas.delete(tkinter.ALL)
         self.thumbnailCanvas.create_image(0, 0, image=self.trackImg, anchor=tkinter.NW)
-        label.configure(text="Track  " + str(trackIndex + 1))
+        label.configure(text="Track  " + str(trackIndex))
         if not self.mapViewer is None:
             self.mapViewer.set_run_indices((data[0][0],data[0][-1]))
 
@@ -619,13 +642,15 @@ class mainWindow(tkinter.Tk):
     def clear_runs_folder(self):
         folder = os.path.dirname(os.path.abspath(__file__))
         folder = os.path.join(folder, "Runs\\")
+        print("folder is",folder)
+        #shutil.rmtree(folder)
         if not os.path.exists(folder):
             os.makedirs(folder)
         for fileName in os.listdir(folder):
             file_path = os.path.join(folder, fileName)
             try:
                 if os.path.isfile(file_path):
-                    os.unlink(file_path)
+                    os.remove(file_path)
             except Exception as e:
                 print(e)
 

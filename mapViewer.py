@@ -92,7 +92,7 @@ class MapViewer(pyglet.window.Window):
             if node[0] > x - 42 and node[0] < x and node[1] > y +32 and node[1] < y + 64:
                 return ("tp",i)
 
-        for point in self.pixelCoords:
+        for point in self.pixelCoords[self.runIndices[0]:self.runIndices[1]]:
             x, y = point
             x -= self.topLeftOfImage[0]
             y = self.topLeftOfImage[1] - y
@@ -569,6 +569,7 @@ class MapViewer(pyglet.window.Window):
 
     def set_coords(self,coords):
         self.pixelCoords = coords
+        self.runIndices = [0,len(self.pixelCoords)]
         self.topLeftOfImage[0] = self.pixelCoords[0][0] - int(self.width/2)
         self.topLeftOfImage[1] = self.pixelCoords[0][1] - int(self.height / 2)
         self.set_up_vertex_lists()
