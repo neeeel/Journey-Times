@@ -382,14 +382,16 @@ class mainWindow(tkinter.Tk):
                             sheet.cell(row=2 + row, column=1 + j).value = datetime.datetime.strftime(
                                         datetime.datetime.strptime(runData[1][j] ,"%d/%m/%Y %H:%M:%S")+ td,"%H:%M:%S")
                             try:
-                                sheet.cell(row=2 + row, column=2 + j + tpCount).value = (
-                                    datetime.datetime.strptime(runData[1][j+1]  ,"%d/%m/%Y %H:%M:%S")-
+                                t = (datetime.datetime.strptime(runData[1][j+1]  ,"%d/%m/%Y %H:%M:%S")-
                                     datetime.datetime.strptime(runData[1][j] ,"%d/%m/%Y %H:%M:%S"))
+                                sheet.cell(row=2 + row, column=2 + j + tpCount).value = str(t)
+                                print("value output is",sheet.cell(row=2 + row, column=2 + j + tpCount).value)
                             except Exception as e:
                                 ### we will get an error when we try to calculate the duration for the last entry in the data list
-                                sheet.cell(row=2 + row, column=2 + j + tpCount).value = (
-                                    datetime.datetime.strptime(runData[1][-1], "%d/%m/%Y %H:%M:%S") -
+                                print("error is",e)
+                                t =(datetime.datetime.strptime(runData[1][-1], "%d/%m/%Y %H:%M:%S") -
                                     datetime.datetime.strptime(runData[1][0], "%d/%m/%Y %H:%M:%S"))
+                                sheet.cell(row=2 + row, column=2 + j + tpCount).value = str(t)
                             sheet.cell(row=2 + row, column=2 + j + (2 * tpCount)).value = runData[2][j]
                             sheet.cell(row=2+row,column=1+tpCount).value = runData[1][0].split(" ")[0]
                     row+=1
@@ -906,6 +908,7 @@ class mainWindow(tkinter.Tk):
         try:
             runIndices = (int(widget.set(row,"#1")),int(widget.set(row,"#2")))
         except Exception as e:
+            print(e,type(e))
             runIndices = None
         print("run indices are",runIndices)
         self.mapViewer.set_run_indices(runIndices)

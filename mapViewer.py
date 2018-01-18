@@ -82,7 +82,7 @@ class MapViewer(pyglet.window.Window):
         ####
         ### calculate the new x and y values for all points
         ###
-
+        print("run indices are",self.runIndices)
         for i,tp in enumerate(self.timingPoints[self.currentDirection]):
             x, y = tp
             x -= self.topLeftOfImage[0]
@@ -99,13 +99,19 @@ class MapViewer(pyglet.window.Window):
             x = (x * self.mapScale)
             y = (y * self.mapScale)
             temp.append((x, y))
+        print("lenght of temp is",len(temp))
+
         #temp = np.asarray(temp)
         result = cdist([node], temp)
         print("smallest distance is",np.amin(result))
         print("closestnode took", time.time() * 1000 - start)
         if np.amin(result) <=20:
-            print("returning",result.argmin())
-            return ("point",result.argmin())
+            if self.runIndices is None:
+                point = result.argmin()
+            else:
+                point = result.argmin() + self.runIndices[0]
+            print("returning",point)
+            return ("point",point)
 
         print("treturning -1")
         return [-1]
