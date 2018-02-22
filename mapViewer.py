@@ -82,6 +82,8 @@ class MapViewer(pyglet.window.Window):
         ####
         ### calculate the new x and y values for all points
         ###
+        if self.runIndices is None:
+            return
         print("run indices are",self.runIndices)
         for i,tp in enumerate(self.timingPoints[self.currentDirection]):
             x, y = tp

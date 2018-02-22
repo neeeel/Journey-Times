@@ -357,7 +357,7 @@ class mainWindow(tkinter.Tk):
         for child in tree.get_children():
             print("child is",child)
             runIndex = int(child.replace("run_","")) -1
-            exampleRun = runIndex ## we want a run that we can use to make the path map
+            exampleRun = 0# runIndex ## we want a run that we can use to make the path map
             runData = self.baseData[index][0][runIndex]
             print("run data is",runData)
             startTime = datetime.datetime.strptime(runData[1][0],"%d/%m/%Y %H:%M:%S").time()

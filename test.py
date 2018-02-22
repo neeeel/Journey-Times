@@ -16,6 +16,7 @@ import window
 
 
 df = None
+closenessThreshold = 0.02
 
 try:
   from lxml import etree
@@ -246,6 +247,8 @@ def load_csv(file,index):
         ###
         ### convert the gps data into WSG 84
         ###
+        df.Lat = df.Lat.astype(float)
+        df.Lon = df.Lon.astype(float)
         df.Lat =df.Lat.apply(ut.latTOdddd)
         df.Lon = df.Lon.apply(ut.lonTOdddd)
         df["Track"] = "Track " + str(index)
@@ -578,7 +581,7 @@ def process_direction(timingPoints):
                 if dist < closestPoint[1]:
                     closestPoint[0] = point
                     closestPoint[1] = dist
-                if dist <= 0.02:
+                if dist <= closenessThreshold:
                     ###
                     ### we have a qualifying point, but there may be a nearby point that is closer
                     ### check the next 15 points to see if there is a closer one
@@ -588,7 +591,7 @@ def process_direction(timingPoints):
                     if val >15:
                         val = 15
                     tempList = []
-                    while dist <= 0.02 and point < endPoint:
+                    while dist <= closenessThreshold and point < endPoint:
                         dist = ut.getDistInMiles(tp, (df.iloc[point]["Lat"], df.iloc[point ]["Lon"]))
                         tempList.append((point,dist))
                         point+=1
@@ -770,11 +773,11 @@ def get_start_points_new(startIndex,dataEnd,tpStart):
     results = []
     ### find first value < 0.02
     while startIndex < dataEnd:
-        start = temp[startIndex:][temp["distToTP1"] < 0.02].head(1)
+        start = temp[startIndex:][temp["distToTP1"] < closenessThreshold].head(1)
         if start.empty:
             break
         startIndex = int(start["Record"])
-        end = temp.iloc[startIndex:][temp["distToTP1"] > 0.02].head(1)
+        end = temp.iloc[startIndex:][temp["distToTP1"] > closenessThreshold].head(1)
         if end.empty:
             break
         endIndex = int(end["Record"])
@@ -823,7 +826,7 @@ def get_final_start_point(startIndex,endIndex,tpStart,tp):
         ### find the latest point between the start point and the next timing point, that goes close to the start point
         ###
         dist = ut.getDistInMiles(c, tpStart)
-        if dist < 0.02:
+        if dist < closenessThreshold:
             latestClosePoint = i
     print("latest close point is",latestClosePoint + startIndex)
     ###
